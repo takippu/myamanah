@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Vault {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ciphertext         String   @db.Text
+  iv                 String
+  authTag            String
+  wrappedDekPass     String   @db.Text
+  wrappedDekRecovery String   @db.Text
+  saltPass           String
+  saltRecovery       String
+  kdfParams          Json
+  schemaVersion      Int      @default(1)
+  recoveryVerifiedAt DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  vault     Vault?
+  otps      EmailOtp[]
+  sessions  Session[]
+}
+
+model EmailOtp {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash     String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  attempts     Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+}

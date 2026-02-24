@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Emergency Release Setup</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Manrope -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#11d493",
+                        "primary-dark": "#0ea674",
+                        "background-light": "#f6f8f7",
+                        "background-dark": "#10221c",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#183028",
+                        "text-main": "#111816",
+                        "text-muted": "#61897c",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom Utilities */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-text-main dark:text-slate-100 flex justify-center min-h-screen">
+<!-- Mobile Container -->
+<div class="relative flex h-full w-full max-w-[480px] flex-col bg-background-light dark:bg-background-dark overflow-x-hidden shadow-xl min-h-screen">
+<!-- Top App Bar -->
+<div class="flex items-center bg-surface-light dark:bg-surface-dark px-4 py-3 justify-between sticky top-0 z-20 shadow-sm">
+<button class="text-text-main dark:text-slate-100 flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold leading-tight tracking-[-0.015em] text-center flex-1">Emergency Release</h1>
+<button class="flex size-10 shrink-0 items-center justify-center rounded-full text-text-main dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-[24px]">info</span>
+</button>
+</div>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto pb-24">
+<!-- Context Header -->
+<div class="px-5 py-4">
+<p class="text-sm text-text-muted dark:text-slate-400 font-medium">Configure your Dead-Man Switch to automatically release vital information if you become inactive.</p>
+</div>
+<!-- Section 1: The Trigger -->
+<div class="px-5 mb-6">
+<h2 class="text-[18px] font-bold mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">timer</span>
+                    The Trigger
+                </h2>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800">
+<div class="flex justify-between items-center mb-4">
+<label class="text-sm font-semibold text-text-muted dark:text-slate-400 uppercase tracking-wider">Inactivity Period</label>
+<span class="text-xl font-bold text-primary">60 days</span>
+</div>
+<!-- Slider Component -->
+<div class="relative w-full h-8 flex items-center">
+<div class="absolute w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full w-[33%] bg-primary"></div>
+</div>
+<div class="absolute left-[33%] size-6 bg-white dark:bg-slate-200 rounded-full shadow-md border-2 border-primary cursor-pointer hover:scale-110 transition-transform flex items-center justify-center">
+<div class="size-2 bg-primary rounded-full"></div>
+</div>
+</div>
+<div class="flex justify-between text-xs text-text-muted dark:text-slate-500 mt-2 font-medium">
+<span>30 days</span>
+<span>180 days</span>
+</div>
+</div>
+</div>
+<!-- Section 2: The Flow (Timeline) -->
+<div class="px-5 mb-6">
+<h2 class="text-[18px] font-bold mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">timeline</span>
+                    The Flow
+                </h2>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 relative">
+<!-- Vertical Line -->
+<div class="absolute left-[35px] top-[40px] bottom-[40px] w-0.5 bg-slate-200 dark:bg-slate-700"></div>
+<!-- Step 1 -->
+<div class="relative flex gap-4 mb-6">
+<div class="z-10 flex-shrink-0 size-8 rounded-full bg-primary/20 flex items-center justify-center border-2 border-primary">
+<span class="material-symbols-outlined text-primary text-[18px] font-bold">mail</span>
+</div>
+<div class="pt-0.5">
+<h3 class="text-sm font-bold text-text-main dark:text-slate-100">Check-in Email</h3>
+<p class="text-xs text-text-muted dark:text-slate-400 mt-0.5">We'll email you after 60 days of inactivity to confirm you are okay.</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="relative flex gap-4 mb-6">
+<div class="z-10 flex-shrink-0 size-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center border-2 border-slate-300 dark:border-slate-600">
+<span class="material-symbols-outlined text-slate-500 dark:text-slate-400 text-[18px]">hourglass_top</span>
+</div>
+<div class="pt-0.5">
+<h3 class="text-sm font-bold text-text-main dark:text-slate-100">Grace Period (7 Days)</h3>
+<p class="text-xs text-text-muted dark:text-slate-400 mt-0.5">You have 7 days to respond or cancel the release process.</p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="relative flex gap-4">
+<div class="z-10 flex-shrink-0 size-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center border-2 border-slate-300 dark:border-slate-600">
+<span class="material-symbols-outlined text-slate-500 dark:text-slate-400 text-[18px]">lock_open_right</span>
+</div>
+<div class="pt-0.5">
+<h3 class="text-sm font-bold text-text-main dark:text-slate-100">Encrypted Release</h3>
+<p class="text-xs text-text-muted dark:text-slate-400 mt-0.5">The encrypted file is sent to your trusted recipient.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 3: The Recipient -->
+<div class="px-5 mb-6">
+<h2 class="text-[18px] font-bold mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">person_add</span>
+                    Trusted Recipient
+                </h2>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800">
+<div class="mb-3">
+<label class="block text-xs font-semibold text-text-muted dark:text-slate-400 uppercase mb-1.5 ml-1">Email Address</label>
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400">alternate_email</span>
+<input class="w-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-0 rounded-lg py-3 pl-10 pr-4 text-sm font-medium text-text-main dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600 transition-all shadow-inner" placeholder="recipient@example.com" type="email"/>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 4: Security Warning -->
+<div class="px-5 mb-4">
+<div class="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-100 dark:border-red-900/40 flex gap-3 items-start">
+<span class="material-symbols-outlined text-red-500 dark:text-red-400 shrink-0 mt-0.5">vpn_key_off</span>
+<div>
+<h4 class="text-sm font-bold text-red-700 dark:text-red-400 mb-1">Zero-Knowledge Warning</h4>
+<p class="text-xs leading-relaxed text-red-600/80 dark:text-red-300/80">
+                            We do not store your Master Key. Your recipient <strong>must</strong> already possess your key (physically or verbally) to decrypt the file. If they don't have it, the data will be unreadable forever.
+                        </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Footer Action -->
+<div class="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-background-light via-background-light to-transparent dark:from-background-dark dark:via-background-dark z-20 pt-8">
+<button class="w-full bg-primary hover:bg-primary-dark text-white dark:text-slate-900 font-bold text-lg py-3.5 rounded-xl shadow-lg shadow-primary/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+<span>Activate Emergency Release</span>
+<span class="material-symbols-outlined">rocket_launch</span>
+</button>
+</div>
+</div>
+</body></html>
