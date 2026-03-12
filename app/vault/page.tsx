@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppBottomNav } from "../components/app-bottom-nav";
+import { FloatingField } from "../components/floating-field";
 import { CategoryCardSkeleton } from "../components/skeletons";
-import { loadVaultData } from "@/lib/vault-client";
+import { VaultSessionGuard } from "../components/vault-session-guard";
+import { emptyVaultData, type VaultData } from "@/lib/vault-data";
+import { loadVaultData, saveVaultData } from "@/lib/vault-client";
 
 function formatLastUpdated(dateStr: string | null): string {
   if (!dateStr) return "Never updated";
@@ -22,7 +25,12 @@ function formatLastUpdated(dateStr: string | null): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 export default function VaultPage() {
+  const [vault, setVault] = useState<VaultData | null>(null);
   const [counts, setCounts] = useState({
     debts: 0,
     assets: 0,
@@ -33,10 +41,20 @@ export default function VaultPage() {
   const [wishesComplete, setWishesComplete] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingTrustedId, setEditingTrustedId] = useState<string | null>(null);
+  const [showTrustedForm, setShowTrustedForm] = useState(false);
+  const [trustedStatus, setTrustedStatus] = useState<string | null>(null);
+  const [showVaultHelp, setShowVaultHelp] = useState(false);
+  const [trustedForm, setTrustedForm] = useState({
+    name: "",
+    relation: "",
+    contact: "",
+  });
 
   const refreshData = async () => {
     try {
       const vault = await loadVaultData();
+      setVault(vault ?? emptyVaultData());
       const debts = vault?.debts?.length ?? 0;
       const assets = vault?.assets?.length ?? 0;
       const digitalLegacy = vault?.digitalLegacy?.length ?? 0;
@@ -59,6 +77,7 @@ export default function VaultPage() {
       setLastUpdated(vault?.meta?.updatedAt ?? null);
     } catch {
       // Vault not accessible, keep counts at 0
+      setVault(emptyVaultData());
     } finally {
       setIsLoading(false);
     }
@@ -79,11 +98,84 @@ export default function VaultPage() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
 
-  const formattedTotal = String(counts.total).padStart(2, "0");
+  const formattedTotal = String(counts.total);
+
+  const resetTrustedForm = () => {
+    setEditingTrustedId(null);
+    setShowTrustedForm(false);
+    setTrustedForm({ name: "", relation: "", contact: "" });
+  };
+
+  const openTrustedForm = (contact?: { id: string; name: string; relation?: string; contact?: string }) => {
+    if (contact) {
+      setEditingTrustedId(contact.id);
+      setTrustedForm({
+        name: contact.name,
+        relation: contact.relation ?? "",
+        contact: contact.contact ?? "",
+      });
+    } else {
+      setEditingTrustedId(null);
+      setTrustedForm({ name: "", relation: "", contact: "" });
+    }
+    setShowTrustedForm(true);
+  };
+
+  const saveTrustedContact = async () => {
+    if (!trustedForm.name.trim() || !trustedForm.contact.trim()) {
+      setTrustedStatus("Name and contact are required.");
+      return;
+    }
+
+    const vault = (await loadVaultData()) ?? emptyVaultData();
+    const currentContacts = vault.trustedContacts ?? [];
+    const nextContacts = editingTrustedId
+      ? currentContacts.map((contact) =>
+          contact.id === editingTrustedId
+            ? {
+                ...contact,
+                name: trustedForm.name.trim(),
+                relation: trustedForm.relation.trim() || undefined,
+                contact: trustedForm.contact.trim(),
+              }
+            : contact,
+        )
+      : [
+          ...currentContacts,
+          {
+            id: crypto.randomUUID(),
+            name: trustedForm.name.trim(),
+            relation: trustedForm.relation.trim() || undefined,
+            contact: trustedForm.contact.trim(),
+          },
+        ].slice(0, 3);
+
+    await saveVaultData({
+      ...vault,
+      trustedContacts: nextContacts,
+    });
+    setTrustedStatus(editingTrustedId ? "Trusted contact updated." : "Trusted contact added.");
+    resetTrustedForm();
+    await refreshData();
+  };
+
+  const deleteTrustedContact = async (id: string) => {
+    const vault = (await loadVaultData()) ?? emptyVaultData();
+    await saveVaultData({
+      ...vault,
+      trustedContacts: (vault.trustedContacts ?? []).filter((contact) => contact.id !== id),
+    });
+    setTrustedStatus("Trusted contact removed.");
+    if (editingTrustedId === id) {
+      resetTrustedForm();
+    }
+    await refreshData();
+  };
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
+        <VaultSessionGuard />
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/50 px-6 py-6 backdrop-blur-lg">
           <Link
             href="/dashboard"
@@ -97,12 +189,13 @@ export default function VaultPage() {
             className="glass-card flex h-12 w-12 items-center justify-center rounded-2xl text-emerald-600 transition-transform active:scale-95"
             aria-label="Vault help"
             type="button"
+            onClick={() => setShowVaultHelp(true)}
           >
             <span className="material-symbols-outlined">help_outline</span>
           </button>
         </header>
 
-        <main className="flex-1 space-y-8 px-6 pb-32">
+        <main className="flex-1 space-y-8 px-6 pb-36">
           {isLoading ? (
             // Skeleton Hero
             <div className="relative mt-4 overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-300 to-slate-400 p-10 animate-pulse">
@@ -116,24 +209,45 @@ export default function VaultPage() {
               </div>
             </div>
           ) : (
-            <div className="dashboard-islamic-pattern relative mt-4 overflow-hidden rounded-[2.5rem] shadow-2xl">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/60 to-emerald-800/20" />
-              <div className="relative flex flex-col items-center gap-6 p-10 text-center">
-                <div className="flex h-20 w-20 items-center justify-center rounded-[2rem] border border-white/20 bg-white/10 shadow-xl backdrop-blur-md">
-                  <span className="material-symbols-outlined text-[40px] font-light text-white">verified_user</span>
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-200/60">
+            <div className="dashboard-islamic-pattern relative mt-4 overflow-hidden rounded-[2.2rem] border border-white/10 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.45)]">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/18 via-transparent to-white/5" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_38%)]" />
+              <div className="relative flex items-center justify-between gap-4 px-6 py-5">
+                <div className="max-w-[11rem] text-left">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-200/58">
                     Total Records
                   </p>
-                  <h2 className="text-3xl font-light tracking-tight text-white">
-                    <span className="font-bold">{formattedTotal}</span>
-                    <span className="ml-2 text-xl text-emerald-200">items</span>
-                  </h2>
-                  <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-5 py-2 backdrop-blur-sm">
-                    <span className="material-symbols-outlined text-[16px] text-emerald-300">update</span>
-                    <span className="text-[11px] font-medium uppercase tracking-widest text-emerald-100">
+                  <p className="mt-2 text-[1.2rem] font-semibold text-white">{formattedTotal}</p>
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 backdrop-blur-sm">
+                    <span className="material-symbols-outlined text-[14px] text-emerald-300">update</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-100/78">
                       {formatLastUpdated(lastUpdated)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex h-[84px] w-[84px] items-center justify-center rounded-full">
+                  <div className="relative flex h-[84px] w-[84px] items-center justify-center">
+                    <svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true">
+                      {Array.from({ length: 24 }).map((_, index) => {
+                        const angle = ((index / 24) * Math.PI * 2) - Math.PI / 2;
+                        const x = 42 + Math.cos(angle) * 32;
+                        const y = 42 + Math.sin(angle) * 32;
+                        const isActive = index < clamp(counts.total, 0, 24);
+
+                        return (
+                          <circle
+                            key={index}
+                            cx={x}
+                            cy={y}
+                            r={isActive ? 2.6 : 2}
+                            fill={isActive ? "#d4af37" : "rgba(255,255,255,0.16)"}
+                          />
+                        );
+                      })}
+                    </svg>
+                    <span className="absolute inset-[14px] flex items-center justify-center rounded-full border border-white/12 bg-gradient-to-br from-emerald-500/95 to-emerald-700/95 shadow-[0_8px_18px_-14px_rgba(0,0,0,0.45)]">
+                      <span className="absolute inset-[6px] rounded-full border border-white/10" />
+                      <span className="material-symbols-outlined relative text-[21px] text-white">inventory_2</span>
                     </span>
                   </div>
                 </div>
@@ -142,6 +256,85 @@ export default function VaultPage() {
           )}
 
           <section className="space-y-4">
+            <div className="rounded-[1.75rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.06)]">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Trusted Contacts</p>
+                  <h3 className="mt-1 text-lg font-semibold text-slate-900">Deadman switch recipients</h3>
+                  <p className="mt-1 text-xs text-slate-500">Add up to 3 people who would matter if the deadman switch is missed.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openTrustedForm()}
+                  disabled={showTrustedForm || (vault?.trustedContacts.length ?? 0) >= 3}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 disabled:opacity-40"
+                >
+                  <span className="material-symbols-outlined">add</span>
+                </button>
+              </div>
+              {trustedStatus ? <p className="mb-3 text-xs font-medium text-emerald-700">{trustedStatus}</p> : null}
+              <div className="space-y-3">
+                {(vault?.trustedContacts.length ?? 0) > 0 ? (
+                  vault?.trustedContacts.map((contact) => (
+                    <div key={contact.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{contact.name}</p>
+                          <p className="mt-1 text-xs text-slate-500">{contact.relation || "Trusted contact"}</p>
+                          <p className="mt-2 text-sm text-slate-700">{contact.contact}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-emerald-700" onClick={() => openTrustedForm(contact)}>
+                            <span className="material-symbols-outlined text-[18px]">edit</span>
+                          </button>
+                          <button type="button" className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-rose-700" onClick={() => void deleteTrustedContact(contact.id)}>
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                    No trusted contacts added yet.
+                  </div>
+                )}
+                {showTrustedForm ? (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <FloatingField label="Name" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
+                      <input
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        value={trustedForm.name}
+                        onChange={(event) => setTrustedForm((current) => ({ ...current, name: event.target.value }))}
+                      />
+                    </FloatingField>
+                    <FloatingField label="Relation" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
+                      <input
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        value={trustedForm.relation}
+                        onChange={(event) => setTrustedForm((current) => ({ ...current, relation: event.target.value }))}
+                      />
+                    </FloatingField>
+                    <FloatingField label="How To Reach" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
+                      <input
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        value={trustedForm.contact}
+                        onChange={(event) => setTrustedForm((current) => ({ ...current, contact: event.target.value }))}
+                      />
+                    </FloatingField>
+                    <div className="flex items-center gap-3">
+                      <button type="button" className="flex-1 rounded-2xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white" onClick={() => void saveTrustedContact()}>
+                        {editingTrustedId ? "Update Contact" : "Save Contact"}
+                      </button>
+                      <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600" onClick={resetTrustedForm}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
             <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
               Vault Categories
             </p>
@@ -200,6 +393,35 @@ export default function VaultPage() {
         ) : (
           <AppBottomNav active="assets" mode="dashboard" />
         )}
+
+        {showVaultHelp ? (
+          <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 px-4 pb-6 pt-12 sm:items-center sm:justify-center">
+            <div className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.45)]">
+              <div className="space-y-3">
+                <h2 className="text-lg font-semibold text-slate-900">About This Vault</h2>
+                <p className="text-sm leading-relaxed text-slate-600">
+                  This page is your vault index. It organizes your assets, debts, digital legacy, and wishes so you can review or update each section from one place.
+                </p>
+                <p className="text-sm leading-relaxed text-slate-600">
+                  Trusted contacts are the people who matter if your deadman switch check-in is missed. Add up to three so their names and contact details stay with your vault records.
+                </p>
+                <p className="text-sm leading-relaxed text-slate-600">
+                  Your sensitive details stay encrypted in the local vault unless you explicitly enable encrypted backup from Settings.
+                </p>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowVaultHelp(false)}
+                  className="rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

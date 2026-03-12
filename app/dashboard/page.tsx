@@ -3,46 +3,35 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppBottomNav } from "../components/app-bottom-nav";
-import { CircularProgress } from "../components/circular-progress";
 import { HeroSkeleton, CardSkeleton, QuickActionSkeleton } from "../components/skeletons";
+import { VaultSessionGuard } from "../components/vault-session-guard";
 import type { VaultData } from "@/lib/vault-data";
-import { getVaultStatus, loadVaultData } from "@/lib/vault-client";
+import { checkInDeadmanSwitch, getLocalProfileName, getVaultStatus, loadVaultData } from "@/lib/vault-client";
 
-function parseAmount(amountStr: string): number {
-  if (!amountStr) return 0;
-  const cleaned = amountStr.replace(/[^\d.-]/g, "");
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
-}
-
-function formatCurrency(amount: number): string {
-  if (amount >= 1000000) {
-    return `${(amount / 1000000).toFixed(1)}M`;
-  }
-  if (amount >= 1000) {
-    return `${(amount / 1000).toFixed(1)}K`;
-  }
-  return amount.toFixed(0);
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 export default function DashboardPage() {
   const [vault, setVault] = useState<VaultData | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
+  const [localProfileName, setLocalProfileName] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
-  const [vaultUpdatedAt, setVaultUpdatedAt] = useState<string | null>(null);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
 
   const refreshData = async () => {
     try {
+      setLocalProfileName(getLocalProfileName() ?? "");
+
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (authRes.ok) {
-        const user = await authRes.json();
-        setUserEmail(user.email ?? "");
+        const payload = (await authRes.json()) as { user?: { email?: string } };
+        setUserEmail(payload.user?.email ?? "");
       }
       
       const data = await loadVaultData();
       setVault(data);
-      const status = await getVaultStatus();
-      setVaultUpdatedAt(status?.updatedAt ?? null);
+      await getVaultStatus();
     } catch {
       // Vault not accessible
     } finally {
@@ -65,45 +54,9 @@ export default function DashboardPage() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
 
-  const totalAssetValue = useMemo(() => {
-    return vault?.assets?.reduce((sum, asset) => sum + parseAmount(asset.value ?? ""), 0) ?? 0;
-  }, [vault]);
-
-  const totalDebtAmount = useMemo(() => {
-    return vault?.debts?.reduce((sum, debt) => sum + parseAmount(debt.amount ?? ""), 0) ?? 0;
-  }, [vault]);
-
-  const netWorth = totalAssetValue - totalDebtAmount;
-
   const assetCount = vault?.assets?.length ?? 0;
   const debtCount = vault?.debts?.length ?? 0;
-  const digitalCount = vault?.digitalLegacy?.length ?? 0;
-  const totalRecords = assetCount + debtCount + digitalCount;
-
-  const checklist = useMemo(() => {
-    const v = vault;
-    return [
-      { label: "Assets mapped", done: (v?.assets.length ?? 0) > 0 },
-      { label: "Debts recorded", done: (v?.debts.length ?? 0) > 0 },
-      {
-        label: "Wishes completed",
-        done:
-          Boolean(v?.wishes.religiousWishes?.trim()) &&
-          Boolean(v?.wishes.familyInstructions?.trim()) &&
-          Boolean(v?.wishes.executorNotes?.trim()),
-      },
-      { label: "Trusted contact added", done: (v?.trustedContacts.length ?? 0) > 0 },
-      { label: "Recovery key saved", done: Boolean(v?.checklist.recoveryKeySaved) },
-      { label: "Recovery tested", done: Boolean(v?.checklist.recoveryTested) },
-    ];
-  }, [vault]);
-
-  const readiness = useMemo(() => {
-    const done = checklist.filter((c) => c.done).length;
-    return checklist.length === 0 ? 0 : Math.round((done / checklist.length) * 100);
-  }, [checklist]);
-
-  const doneCount = checklist.filter((c) => c.done).length;
+  const digitalLegacyCount = vault?.digitalLegacy?.length ?? 0;
 
   const wishFields = [
     vault?.wishes.religiousWishes?.trim(),
@@ -113,6 +66,7 @@ export default function DashboardPage() {
   ];
   const wishCompleted = wishFields.filter(Boolean).length;
   const wishTotal = 4;
+  const wishesDone = wishCompleted === wishTotal;
 
   const hijriDate = useMemo(() => {
     try {
@@ -126,50 +80,141 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const lastSyncedLabel = useMemo(() => {
-    if (!vaultUpdatedAt) return "not synced yet";
-    const diffMs = Date.now() - new Date(vaultUpdatedAt).getTime();
-    const minute = 60_000;
-    const hour = 60 * minute;
-    const day = 24 * hour;
-    if (diffMs < minute) return "just now";
-    if (diffMs < hour) return `${Math.floor(diffMs / minute)}m ago`;
-    if (diffMs < day) return `${Math.floor(diffMs / hour)}h ago`;
-    return `${Math.floor(diffMs / day)}d ago`;
-  }, [vaultUpdatedAt]);
-
   const displayName = useMemo(() => {
+    if (localProfileName) return localProfileName;
     if (!userEmail) return "Guest";
     const name = userEmail.split("@")[0];
     return name.charAt(0).toUpperCase() + name.slice(1);
-  }, [userEmail]);
+  }, [localProfileName, userEmail]);
+
+  const nextSteps = useMemo(() => {
+    const items: Array<{
+      href: string;
+      icon: string;
+      title: string;
+      detail: string;
+      iconClassName: string;
+    }> = [];
+
+    if (assetCount === 0) {
+      items.push({
+        href: "/asset-records",
+        icon: "payments",
+        title: "Add your first asset",
+        detail: "Start mapping what your family needs to find.",
+        iconClassName: "bg-[#D4AF37]/12 text-[#D4AF37]",
+      });
+    }
+
+    if (debtCount === 0) {
+      items.push({
+        href: "/debt-records",
+        icon: "receipt_long",
+        title: "Add outstanding debts",
+        detail: "Track loans, bills, and personal obligations.",
+        iconClassName: "bg-rose-100 text-rose-600",
+      });
+    }
+
+    if (digitalLegacyCount === 0) {
+      items.push({
+        href: "/digital-legacy",
+        icon: "fingerprint",
+        title: "Add digital records",
+        detail: "Save account access, platforms, and recovery notes.",
+        iconClassName: "bg-sky-50 text-sky-600",
+      });
+    }
+
+    if (!wishesDone) {
+      items.push({
+        href: "/wishes",
+        icon: "auto_stories",
+        title: "Continue wishes & instructions",
+        detail: `${wishCompleted}/${wishTotal} sections completed`,
+        iconClassName: "bg-emerald-50 text-emerald-600",
+      });
+    }
+
+    return items;
+  }, [assetCount, debtCount, digitalLegacyCount, wishCompleted, wishTotal, wishesDone]);
+
+  const allCoreRecordsReady =
+    assetCount > 0 && debtCount > 0 && digitalLegacyCount > 0 && wishesDone;
+
+  const deadmanLastCheckInAt = vault?.meta?.deadmanLastCheckInAt ?? null;
+
+  const deadmanStatus = useMemo(() => {
+    if (!deadmanLastCheckInAt) {
+      return {
+        label: "Not armed",
+        detail: "No check-in recorded yet",
+        overdue: true,
+        daysElapsed: 30,
+        daysRemaining: 0,
+      };
+    }
+
+    const lastCheck = new Date(deadmanLastCheckInAt).getTime();
+    const daysSince = Math.floor((Date.now() - lastCheck) / (1000 * 60 * 60 * 24));
+    const daysRemaining = 30 - daysSince;
+
+    if (daysRemaining <= 0) {
+      return {
+        label: "Check-in overdue",
+        detail: `${Math.abs(daysRemaining)} day(s) past the 30-day window`,
+        overdue: true,
+        daysElapsed: clamp(daysSince, 30, 60),
+        daysRemaining: 0,
+      };
+    }
+
+    return {
+      label: "Protected",
+      detail: `${daysRemaining} day(s) until next required check-in`,
+      overdue: false,
+      daysElapsed: clamp(daysSince, 0, 30),
+      daysRemaining,
+    };
+  }, [deadmanLastCheckInAt]);
+
+  const deadmanProgress = useMemo(() => {
+    const progress = clamp(deadmanStatus.daysElapsed / 30, 0, 1);
+    return {
+      progress,
+      elapsedDots: clamp(Math.round(progress * 24), 0, 24),
+    };
+  }, [deadmanStatus.daysElapsed]);
+
+  const deadmanActionLabel = useMemo(() => {
+    if (isCheckingIn) {
+      return "Checking in...";
+    }
+
+    if (deadmanStatus.overdue || deadmanStatus.label === "Not armed") {
+      return "Tap to Check In";
+    }
+
+    return null;
+  }, [deadmanStatus.label, deadmanStatus.overdue, isCheckingIn]);
+
+  const onCheckIn = async () => {
+    setIsCheckingIn(true);
+    try {
+      const updatedVault = await checkInDeadmanSwitch();
+      setVault(updatedVault);
+    } finally {
+      setIsCheckingIn(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
+        <VaultSessionGuard />
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/70 px-6 py-5 backdrop-blur-lg">
-          <Link
-            href="/settings"
-            aria-label="Open settings"
-            className="glass-card flex h-12 w-12 items-center justify-center rounded-2xl transition-transform active:scale-95"
-          >
-            <span className="material-symbols-outlined text-slate-600">settings</span>
-          </Link>
-          <div className="flex gap-3">
-            <Link
-              href="/checklist"
-              aria-label="Checklist"
-              className="glass-card flex h-12 w-12 items-center justify-center rounded-2xl transition-transform active:scale-95"
-            >
-              <span className="material-symbols-outlined text-slate-600">fact_check</span>
-            </Link>
-            <Link
-              href="/settings"
-              className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border-2 border-white bg-emerald-900 text-white shadow-lg"
-            >
-              <span className="material-symbols-outlined">person</span>
-            </Link>
-          </div>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-900">MyAmanah</p>
+          <div className="h-12 w-12" aria-hidden="true" />
         </header>
 
         <main className="flex-1 space-y-4 px-5 pb-36">
@@ -180,61 +225,71 @@ export default function DashboardPage() {
             </h1>
           </div>
 
-          {/* Readiness Progress Card with Circular Progress */}
           {isLoading ? (
             <HeroSkeleton />
           ) : (
-            <div className="dashboard-islamic-pattern group relative overflow-hidden rounded-[2.2rem] shadow-[0_16px_30px_-16px_rgba(0,0,0,0.5)] transition-all duration-500 hover:-translate-y-1">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/40 to-transparent" />
-              <div className="relative flex items-center gap-5 p-6">
-                <CircularProgress value={readiness} size={90} strokeWidth={8} />
-                <div className="flex-1">
-                  <p className="text-xs font-medium uppercase tracking-widest text-emerald-200/60">Readiness</p>
-                  <h2 className="text-2xl font-light tracking-tight text-white">
-                    <span className="font-bold">{doneCount}</span>
-                    <span className="text-lg text-emerald-200">/{checklist.length}</span>
-                  </h2>
-                  <p className="text-sm text-emerald-100/80">
-                    {doneCount === checklist.length ? "All complete!" : `${checklist.length - doneCount} remaining`}
-                  </p>
-                  <p className="mt-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-emerald-200/50">
-                    <span className="material-symbols-outlined text-[14px]">sync</span>
-                    {`Last updated ${lastSyncedLabel}`}
-                  </p>
+            <div className="dashboard-islamic-pattern group relative overflow-hidden rounded-[2.2rem] border border-white/10 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.45)] transition-all duration-500 hover:-translate-y-1">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/18 via-transparent to-white/5" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_38%)]" />
+              <div className="relative flex items-center justify-between gap-4 px-6 py-5">
+                <div className="max-w-[13rem]">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-200/58">Deadman Switch</p>
+                  <h3 className="mt-2 text-[1.2rem] font-semibold text-white">{deadmanStatus.label}</h3>
+                  <p className="mt-1 text-sm leading-5 text-emerald-50/78">{deadmanStatus.detail}</p>
+                </div>
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void onCheckIn()}
+                    disabled={isCheckingIn}
+                    aria-label={isCheckingIn ? "Checking in deadman switch" : "Check in to deadman switch"}
+                    className={`group/indicator relative flex h-[84px] w-[84px] items-center justify-center rounded-full transition-transform active:scale-[0.98] ${
+                      isCheckingIn ? "opacity-80" : ""
+                    }`}
+                  >
+                    <svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true">
+                      {Array.from({ length: 24 }).map((_, index) => {
+                        const angle = ((index / 24) * Math.PI * 2) - Math.PI / 2;
+                        const x = 42 + Math.cos(angle) * 32;
+                        const y = 42 + Math.sin(angle) * 32;
+                        const isActive = index < deadmanProgress.elapsedDots;
+                        return (
+                          <circle
+                            key={index}
+                            cx={x}
+                            cy={y}
+                            r={isActive ? 2.6 : 2}
+                            fill={
+                              isActive
+                                ? deadmanStatus.overdue
+                                  ? "#fda4af"
+                                  : "#d4af37"
+                                : "rgba(255,255,255,0.16)"
+                            }
+                          />
+                        );
+                      })}
+                    </svg>
+                    <span
+                      className={`absolute inset-[14px] flex items-center justify-center rounded-full border shadow-[0_8px_18px_-14px_rgba(0,0,0,0.45)] transition-colors ${
+                        deadmanStatus.overdue
+                          ? "border-rose-200/20 bg-gradient-to-br from-rose-500/95 to-rose-700/95"
+                          : "border-white/12 bg-gradient-to-br from-emerald-500/95 to-emerald-700/95"
+                      }`}
+                    >
+                      <span className="absolute inset-[6px] rounded-full border border-white/10" />
+                      <span className="material-symbols-outlined relative text-[21px] text-white">
+                        {isCheckingIn ? "sync" : deadmanStatus.overdue ? "favorite" : "shield_with_heart"}
+                      </span>
+                    </span>
+                  </button>
+                  {deadmanActionLabel ? (
+                    <span className="text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-100/76">
+                      {deadmanActionLabel}
+                    </span>
+                  ) : null}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Summary Cards */}
-          {isLoading ? (
-            <div className="grid grid-cols-2 gap-3">
-              <CardSkeleton />
-              <CardSkeleton />
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <Link
-                href="/vault"
-                className="glass-card rounded-[1.5rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_10px_24px_-18px_rgba(0,0,0,0.35)] transition-all active:scale-95"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10 text-[#D4AF37] mb-3">
-                  <span className="material-symbols-outlined">inventory_2</span>
-                </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Total Records</p>
-                <h3 className="mt-1 text-2xl font-bold text-slate-900">{totalRecords}</h3>
-              </Link>
-
-              <Link
-                href="/vault"
-                className="glass-card rounded-[1.5rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_10px_24px_-18px_rgba(0,0,0,0.35)] transition-all active:scale-95"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 mb-3">
-                  <span className="material-symbols-outlined">account_balance_wallet</span>
-                </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Net Worth</p>
-                <h3 className="mt-1 text-2xl font-bold text-slate-900">{`RM${formatCurrency(netWorth)}`}</h3>
-              </Link>
             </div>
           )}
 
@@ -246,60 +301,60 @@ export default function DashboardPage() {
               <CardSkeleton />
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
-              <Link
-                href="/asset-records"
-                className="glass-card group relative rounded-[2rem] border border-[#e4e6eb] p-6 shadow-[0_12px_28px_-18px_rgba(0,0,0,0.35)] transition-all duration-300 hover:-translate-y-1"
-              >
-                <div className="mb-4 flex items-start justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#D4AF37]/10 text-[#D4AF37]">
-                    <span className="material-symbols-outlined">payments</span>
-                  </div>
-                  <span className="material-symbols-outlined text-slate-400">arrow_forward_ios</span>
-                </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Assets</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-900">{`${assetCount} records`}</h3>
-                <p className="mt-1 text-sm text-slate-400">{`Value: RM${formatCurrency(totalAssetValue)}`}</p>
-              </Link>
-
-              <Link
-                href="/debt-records"
-                className="glass-card group relative rounded-[2rem] border border-[#e4e6eb] p-6 shadow-[0_12px_28px_-18px_rgba(0,0,0,0.35)] transition-all duration-300 hover:-translate-y-1"
-              >
-                <div className="mb-4 flex items-start justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
-                    <span className="material-symbols-outlined">receipt_long</span>
-                  </div>
-                  <span className="material-symbols-outlined text-slate-400">arrow_forward_ios</span>
-                </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Debts</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-900">{`${debtCount} records`}</h3>
-                <p className="mt-1 text-sm text-slate-400">{`Total: RM${formatCurrency(totalDebtAmount)}`}</p>
-              </Link>
-
-              <Link
-                href="/wishes"
-                className="glass-card rounded-[2rem] border border-[#e4e6eb] p-6 shadow-[0_12px_28px_-18px_rgba(0,0,0,0.35)] transition-all duration-300 hover:-translate-y-1"
-              >
+            <section className="space-y-4">
+              <div className="rounded-[1.8rem] border border-[#e4e6eb] bg-white/82 p-5 shadow-[0_12px_28px_-20px_rgba(0,0,0,0.3)] backdrop-blur-sm">
                 <div className="mb-4 flex items-center justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                    <span className="material-symbols-outlined">auto_stories</span>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Next Steps</p>
+                    <h2 className="mt-1 text-lg font-semibold text-slate-900">What to do now</h2>
                   </div>
-                  <span className="material-symbols-outlined text-slate-300">arrow_forward_ios</span>
+                  <Link
+                    href="/vault"
+                    className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700"
+                  >
+                    Open Vault
+                  </Link>
                 </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Wishes & Instructions</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-900">{`${wishCompleted}/${wishTotal} completed`}</h3>
-                <div className="mt-3 flex items-center gap-3">
-                  <span className={`rounded-lg px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${
-                    wishCompleted === wishTotal 
-                      ? "bg-emerald-100 text-emerald-700" 
-                      : "bg-amber-100/50 text-amber-700"
-                  }`}>
-                    {wishCompleted === wishTotal ? "Completed" : "In Progress"}
-                  </span>
+                <div className="space-y-3">
+                  {nextSteps.length > 0 ? (
+                    nextSteps.map((item) => (
+                      <DashboardActionCard
+                        key={item.href}
+                        href={item.href}
+                        icon={item.icon}
+                        title={item.title}
+                        detail={item.detail}
+                        iconClassName={item.iconClassName}
+                      />
+                    ))
+                  ) : (
+                    <div className="rounded-[1.4rem] border border-emerald-100 bg-emerald-50 px-4 py-4">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                          <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-950">
+                            {allCoreRecordsReady ? "Everything looks in place" : "You are all caught up"}
+                          </p>
+                          <p className="mt-1 text-xs text-emerald-800/80">
+                            {allCoreRecordsReady
+                              ? "Your key records and wishes are already set."
+                              : "There is nothing urgent to finish right now."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </Link>
-            </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <DashboardStatCard label="Assets" value={String(assetCount)} />
+                <DashboardStatCard label="Debts" value={String(debtCount)} />
+                <DashboardStatCard label="Wishes" value={`${wishCompleted}/${wishTotal}`} />
+              </div>
+            </section>
           )}
 
           {/* Quick Actions */}
@@ -353,6 +408,55 @@ export default function DashboardPage() {
           <AppBottomNav active="home" mode="dashboard" />
         )}
       </div>
+    </div>
+  );
+}
+
+function DashboardActionCard({
+  href,
+  icon,
+  title,
+  detail,
+  iconClassName,
+}: {
+  href: string;
+  icon: string;
+  title: string;
+  detail: string;
+  iconClassName: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-center justify-between rounded-[1.4rem] border border-[#eef0f3] bg-[#f8f9fb] px-4 py-4 transition-all duration-300 hover:-translate-y-[1px]"
+    >
+      <div className="flex items-center gap-4">
+        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${iconClassName}`}>
+          <span className="material-symbols-outlined text-[20px]">{icon}</span>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
+          <p className="mt-1 text-xs text-slate-500">{detail}</p>
+        </div>
+      </div>
+      <span className="material-symbols-outlined text-slate-300 transition-transform duration-300 group-hover:translate-x-1">
+        arrow_forward_ios
+      </span>
+    </Link>
+  );
+}
+
+function DashboardStatCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[1.35rem] border border-[#e4e6eb] bg-white/82 px-4 py-3 shadow-[0_10px_20px_-18px_rgba(0,0,0,0.28)]">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-2 text-lg font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
