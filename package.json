@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push"
@@ -15,6 +17,7 @@
     "@fontsource/material-symbols-outlined": "^5.2.35",
     "@noble/hashes": "^2.0.1",
     "@prisma/client": "^6.16.2",
+    "better-auth": "^1.4.19",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -30,6 +33,7 @@
     "eslint-config-next": "16.1.6",
     "prisma": "^6.16.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

@@ -1,51 +1,51 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import {
-  accessSetupCookieName,
-  generateSessionToken,
-  hashSessionToken,
-  sessionCookieName,
-} from "@/lib/auth";
 
 export async function POST() {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const enabled =
+    process.env.MOCK_LOGIN_ENABLED === "true" || process.env.NODE_ENV !== "production";
+
+  if (!enabled) {
+    return NextResponse.json({ error: "Mock login is disabled." }, { status: 403 });
   }
 
-  const sessionToken = generateSessionToken();
-  let dbBacked = true;
-  try {
-    const email = "mock.user@myamanah.local";
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: { email },
-    });
+  const email = process.env.MOCK_LOGIN_EMAIL ?? "demo@myamanah.local";
+  const name = process.env.MOCK_LOGIN_NAME ?? "Demo User";
 
-    const tokenHash = hashSessionToken(sessionToken);
-    const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-    await prisma.session.create({
-      data: { userId: user.id, tokenHash, expiresAt },
-    });
-  } catch {
-    dbBacked = false;
-  }
-
-  const res = NextResponse.json({ ok: true, mode: dbBacked ? "db-session" : "cookie-only" });
-  res.cookies.set(sessionCookieName(), sessionToken, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: false,
-    path: "/",
-    maxAge: 14 * 24 * 60 * 60,
-  });
-  res.cookies.set(accessSetupCookieName(), "1", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: false,
-    path: "/",
-    maxAge: 14 * 24 * 60 * 60,
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: { name },
+    create: {
+      email,
+      name,
+      emailVerified: true,
+    },
   });
 
-  return res;
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+
+  await prisma.session.create({
+    data: {
+      token,
+      userId: user.id,
+      expiresAt,
+    },
+  });
+
+  const response = NextResponse.json({
+    ok: true,
+    user: { id: user.id, email: user.email, name: user.name },
+  });
+
+  response.cookies.set("better-auth.session_token", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: expiresAt,
+  });
+
+  return response;
 }

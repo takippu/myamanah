@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppBottomNav } from "../components/app-bottom-nav";
-import { ChecklistItemSkeleton, QuickActionSkeleton } from "../components/skeletons";
+import { ChecklistItemSkeleton } from "../components/skeletons";
+import { VaultSessionGuard } from "../components/vault-session-guard";
 import { emptyVaultData, type VaultData } from "@/lib/vault-data";
 import { getVaultStatus, loadVaultData, markRecoveryVerified, saveVaultData } from "@/lib/vault-client";
 
@@ -145,6 +146,7 @@ export default function ChecklistPage() {
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
+        <VaultSessionGuard />
         {/* Sticky Header */}
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/70 px-6 py-5 backdrop-blur-lg">
           <Link

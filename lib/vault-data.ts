@@ -1,8 +1,14 @@
+export type VaultContact = {
+  name: string;
+  method: string;
+};
+
 export type AssetRecord = {
   id: string;
   assetType: string;
   institution: string;
   whereToFind: string;
+  contacts?: VaultContact[];
   contactPerson?: string;
   contactMethod?: string;
   notes?: string;
@@ -16,6 +22,7 @@ export type DebtRecord = {
   amount?: string;
   dueDate?: string;
   whereDocs: string;
+  contacts?: VaultContact[];
   notes?: string;
 };
 
@@ -31,6 +38,9 @@ export type DigitalLegacyRecord = {
   category: string;
   platform: string;
   whereToFind: string;
+  accountIdentifier?: string;
+  accountPassword?: string;
+  contacts?: VaultContact[];
   recoveryContact?: string;
   notes?: string;
 };
@@ -50,6 +60,7 @@ export type VaultData = {
   meta: {
     schemaVersion: number;
     updatedAt: string;
+    deadmanLastCheckInAt?: string | null;
   };
 };
 
@@ -69,6 +80,7 @@ export function emptyVaultData(): VaultData {
     meta: {
       schemaVersion: 1,
       updatedAt: new Date().toISOString(),
+      deadmanLastCheckInAt: null,
     },
   };
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-type NavKey = "home" | "assets" | "debts" | "wishes" | "checklist" | "settings";
+type NavKey = "home" | "assets" | "checklist" | "settings";
 
 type NavItem = {
   key: NavKey;
@@ -14,20 +14,13 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { key: "home", label: "Home", href: "/dashboard", icon: "home" },
   { key: "assets", label: "Vault", href: "/vault", icon: "lock" },
-  { key: "debts", label: "Debts", href: "/debt-records", icon: "receipt_long" },
-  { key: "wishes", label: "Digital", href: "/digital-legacy", icon: "menu_book" },
-  { key: "checklist", label: "Checklist", href: "/checklist", icon: "check_circle" },
-];
-
-const DASHBOARD_NAV_ITEMS: NavItem[] = [
-  { key: "home", label: "Home", href: "/dashboard", icon: "home" },
-  { key: "assets", label: "Vault", href: "/vault", icon: "lock" },
   { key: "checklist", label: "Checklist", href: "/checklist", icon: "fact_check" },
   { key: "settings", label: "Settings", href: "/settings", icon: "settings" },
 ];
 
 export function AppBottomNav({ active, mode = "default" }: { active: NavKey; mode?: "default" | "dashboard" }) {
-  const items = mode === "dashboard" ? DASHBOARD_NAV_ITEMS : NAV_ITEMS;
+  void mode;
+  const items = NAV_ITEMS;
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 w-[88%] max-w-[360px] -translate-x-1/2 pb-safe">

@@ -2,36 +2,75 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { initializeVaultIfMissing } from "@/lib/vault-client";
-
-// Generate a secure recovery key
-function generateRecoveryKey(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "ak-"; // Amanah Key prefix
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
+import { generateRecoveryKey } from "@/lib/vault-crypto";
+import { clearVaultSecrets, getVaultSecrets, setVaultSecrets } from "@/lib/vault-session";
+import {
+  hasLocalVaultPayload,
+  initializeVaultIfMissing,
+  verifyLocalVaultCredentials,
+  clearLocalEncryptedPayload,
+  getLocalProfileName,
+  setLocalProfileName,
+} from "@/lib/vault-client";
 
 export default function AccessSetupPage() {
   const router = useRouter();
+  const [mode, setMode] = useState<"checking" | "unlock" | "create">("checking");
   const [step, setStep] = useState<"passphrase" | "recovery" | "confirm" | "complete">("passphrase");
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
   const [recoveryKey, setRecoveryKey] = useState("");
+  const [unlockPassphrase, setUnlockPassphrase] = useState("");
+  const [unlockRecoveryKey, setUnlockRecoveryKey] = useState("");
   const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
+  const [fullName, setFullName] = useState("");
 
   useEffect(() => {
-    // Generate recovery key when entering recovery step
-    if (step === "recovery" && !recoveryKey) {
-      setRecoveryKey(generateRecoveryKey());
-    }
-  }, [step, recoveryKey]);
+    let cancelled = false;
+
+    const checkAccess = async () => {
+      const storedName = getLocalProfileName();
+      if (!cancelled) {
+        setFullName(storedName ?? "");
+      }
+
+      const localVaultExists = hasLocalVaultPayload();
+      const existingSecrets = getVaultSecrets();
+
+      if (!localVaultExists) {
+        if (!cancelled) {
+          setMode("create");
+        }
+        return;
+      }
+
+      if (!existingSecrets) {
+        if (!cancelled) {
+          setMode("unlock");
+        }
+        return;
+      }
+
+      try {
+        await verifyLocalVaultCredentials(existingSecrets.passphrase, existingSecrets.recoveryKey);
+        router.replace("/dashboard");
+      } catch {
+        if (!cancelled) {
+          setMode("unlock");
+        }
+      }
+    };
+
+    void checkAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const validatePassphrase = () => {
     if (passphrase.length < 12) {
@@ -48,6 +87,9 @@ export default function AccessSetupPage() {
 
   const handlePassphraseSubmit = () => {
     if (validatePassphrase()) {
+      if (!recoveryKey) {
+        setRecoveryKey(generateRecoveryKey());
+      }
       setStep("recovery");
     }
   };
@@ -66,12 +108,11 @@ export default function AccessSetupPage() {
     setError(null);
     
     try {
-      // Store secrets in session for encryption
-      const { setVaultSecrets } = await import("@/lib/vault-session");
       setVaultSecrets({
         passphrase,
         recoveryKey,
       });
+      setLocalProfileName(fullName || null);
       
       // Initialize the vault
       await initializeVaultIfMissing();
@@ -82,10 +123,39 @@ export default function AccessSetupPage() {
       setTimeout(() => {
         router.push("/dashboard");
       }, 2000);
-    } catch (err) {
+    } catch {
       setError("Failed to initialize vault. Please try again.");
       setIsLoading(false);
     }
+  };
+
+  const handleUnlock = async () => {
+    if (!unlockPassphrase || !unlockRecoveryKey) {
+      setError("Enter both your passphrase and recovery key to unlock this device.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      await verifyLocalVaultCredentials(unlockPassphrase, unlockRecoveryKey);
+      setVaultSecrets({
+        passphrase: unlockPassphrase,
+        recoveryKey: unlockRecoveryKey,
+      });
+      router.push("/dashboard");
+    } catch {
+      setError("Those access keys did not unlock the local vault.");
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateNewVault = () => {
+    clearLocalEncryptedPayload();
+    clearVaultSecrets();
+    setMode("create");
+    setStep("passphrase");
+    setError(null);
   };
 
   const copyRecoveryKey = () => {
@@ -129,8 +199,94 @@ export default function AccessSetupPage() {
             </div>
           )}
 
+          {mode === "checking" && (
+            <div className="flex h-[60vh] flex-col items-center justify-center text-center">
+              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-[2.5rem] bg-emerald-500 text-white shadow-xl shadow-emerald-500/30">
+                <span className="material-symbols-outlined animate-spin text-[48px]">progress_activity</span>
+              </div>
+              <h1 className="text-3xl font-light tracking-tight text-slate-900">
+                Checking your <span className="font-semibold">vault</span>
+              </h1>
+              <p className="mt-2 text-sm text-slate-500">
+                Looking for local encrypted data on this device.
+              </p>
+            </div>
+          )}
+
+          {mode === "unlock" && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-3xl font-light tracking-tight text-slate-900">
+                  Unlock your <span className="font-semibold">vault</span>
+                </h1>
+                <p className="mt-2 text-sm text-slate-500">
+                  This device already has an encrypted local vault. Enter your passphrase and recovery key to continue.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Passphrase
+                  </label>
+                  <input
+                    type={showPassphrase ? "text" : "password"}
+                    value={unlockPassphrase}
+                    onChange={(e) => setUnlockPassphrase(e.target.value)}
+                    placeholder="Your passphrase"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Recovery Key
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showRecovery ? "text" : "password"}
+                      value={unlockRecoveryKey}
+                      onChange={(e) => setUnlockRecoveryKey(e.target.value)}
+                      placeholder="Your saved recovery key"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRecovery(!showRecovery)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    >
+                      <span className="material-symbols-outlined">
+                        {showRecovery ? "visibility_off" : "visibility"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleUnlock}
+                disabled={isLoading}
+                className="flex w-full items-center justify-center gap-3 rounded-[2rem] bg-emerald-800 py-5 text-sm font-semibold tracking-wide text-white shadow-xl shadow-emerald-900/20 transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? "Unlocking..." : "Unlock Vault"}
+              </button>
+
+              <p className="text-center text-xs text-slate-400">
+                New device or no local vault here? Create a new offline vault on a different browser profile or device.
+              </p>
+              <button
+                type="button"
+                onClick={handleCreateNewVault}
+                className="mt-3 w-full rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition-colors hover:border-slate-500 hover:text-slate-900"
+              >
+                Start a new vault on this device
+              </button>
+            </div>
+          )}
+
           {/* Step 1: Passphrase */}
-          {step === "passphrase" && (
+          {mode === "create" && step === "passphrase" && (
             <div className="space-y-6">
               <div>
                 <h1 className="text-3xl font-light tracking-tight text-slate-900">
@@ -142,6 +298,21 @@ export default function AccessSetupPage() {
               </div>
 
               <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Your Name
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="How you'd like this vault labeled"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Saved only on this device unless you later enable encrypted cloud sync.
+                  </p>
+                </div>
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
                     Passphrase
@@ -196,7 +367,7 @@ export default function AccessSetupPage() {
           )}
 
           {/* Step 2: Recovery Key */}
-          {step === "recovery" && (
+          {mode === "create" && step === "recovery" && (
             <div className="space-y-6">
               <div>
                 <h1 className="text-3xl font-light tracking-tight text-slate-900">
@@ -265,7 +436,7 @@ export default function AccessSetupPage() {
           )}
 
           {/* Step 3: Final Confirmation */}
-          {step === "confirm" && (
+          {mode === "create" && step === "confirm" && (
             <div className="space-y-6">
               <div>
                 <h1 className="text-3xl font-light tracking-tight text-slate-900">
@@ -305,6 +476,17 @@ export default function AccessSetupPage() {
                 </p>
               </div>
 
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                <p className="text-xs leading-relaxed text-amber-900">
+                  <span className="font-semibold">Local-only by default:</span> your vault is saved only in this
+                  browser on this device. It can be lost if you clear browser storage, reset this browser, switch
+                  browsers, or move to another device before enabling backup.
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-amber-900">
+                  You can enable encrypted Google sync later from Settings if you want a cloud backup.
+                </p>
+              </div>
+
               <button
                 type="button"
                 onClick={handleComplete}
@@ -327,7 +509,7 @@ export default function AccessSetupPage() {
           )}
 
           {/* Step 4: Complete */}
-          {step === "complete" && (
+          {mode === "create" && step === "complete" && (
             <div className="flex h-[60vh] flex-col items-center justify-center text-center">
               <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-[2.5rem] bg-emerald-500 text-white shadow-xl shadow-emerald-500/30">
                 <span className="material-symbols-outlined text-[48px]">check_circle</span>

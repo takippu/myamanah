@@ -21,30 +21,3 @@ export const encryptedVaultPayloadSchema = z.object({
 });
 
 export type EncryptedVaultPayload = z.infer<typeof encryptedVaultPayloadSchema>;
-
-export function getOwnerKeyFromHeaders(headers: Headers): string | null {
-  const ownerKey = headers.get("x-owner-key")?.trim();
-  if (!ownerKey) return null;
-  if (ownerKey.length < 8) return null;
-  return ownerKey;
-}
-
-function parseCookie(cookieHeader: string): Record<string, string> {
-  return cookieHeader.split(";").reduce<Record<string, string>>((acc, pair) => {
-    const [rawKey, ...rest] = pair.trim().split("=");
-    if (!rawKey || rest.length === 0) return acc;
-    acc[rawKey] = decodeURIComponent(rest.join("="));
-    return acc;
-  }, {});
-}
-
-export function getOwnerKeyFromRequest(req: Request): string | null {
-  const fromHeader = getOwnerKeyFromHeaders(req.headers);
-  if (fromHeader) return fromHeader;
-  const cookieHeader = req.headers.get("cookie");
-  if (!cookieHeader) return null;
-  const cookies = parseCookie(cookieHeader);
-  const fromCookie = cookies.owner_key?.trim();
-  if (!fromCookie || fromCookie.length < 8) return null;
-  return fromCookie;
-}

@@ -2,24 +2,53 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppBottomNav } from "../components/app-bottom-nav";
-import { HeroSkeleton, FormSkeleton, ListItemSkeleton } from "../components/skeletons";
-import { emptyVaultData, type DigitalLegacyRecord } from "@/lib/vault-data";
+import { ConfirmActionModal } from "../components/confirm-action-modal";
+import { CustomSelect } from "../components/custom-select";
+import { FloatingField } from "../components/floating-field";
+import { HeroSkeleton,  ListItemSkeleton } from "../components/skeletons";
+import { RecordListDrawer } from "../components/record-list-drawer";
+import { VaultSessionGuard } from "../components/vault-session-guard";
+import { emptyVaultData, type DigitalLegacyRecord, type VaultContact } from "@/lib/vault-data";
 import { loadVaultData, saveVaultData } from "@/lib/vault-client";
 
 const CATEGORY_OPTIONS = ["Social Media", "Email", "Cloud", "Banking App", "Other"];
 
+function normalizeContacts(record: Pick<DigitalLegacyRecord, "contacts" | "recoveryContact">): VaultContact[] {
+  if (record.contacts && record.contacts.length > 0) {
+    return record.contacts.slice(0, 3).map((contact) => ({
+      name: contact.name ?? "",
+      method: contact.method ?? "",
+    }));
+  }
+
+  if (record.recoveryContact) {
+    return [{ name: record.recoveryContact, method: "" }];
+  }
+
+  return [];
+}
+
 export default function DigitalLegacyPage() {
+  const router = useRouter();
   const [items, setItems] = useState<DigitalLegacyRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [statusTone, setStatusTone] = useState<"success" | "error">("success");
+  const [showFormDrawer, setShowFormDrawer] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
+  const [showCredentials, setShowCredentials] = useState(false);
   const [form, setForm] = useState({
     category: CATEGORY_OPTIONS[0],
     platform: "",
     whereToFind: "",
-    recoveryContact: "",
+    accountIdentifier: "",
+    accountPassword: "",
+    contacts: [] as VaultContact[],
     notes: "",
   });
 
@@ -50,55 +79,115 @@ export default function DigitalLegacyPage() {
   }, []);
 
   const totalRecords = items.length;
-  const labeledTotal = useMemo(() => `${String(totalRecords).padStart(2, "0")}`, [totalRecords]);
+  const labeledTotal = useMemo(() => String(totalRecords), [totalRecords]);
 
   const resetForm = () => {
     setEditingId(null);
+    setShowContacts(false);
+    setShowCredentials(false);
     setForm({
       category: CATEGORY_OPTIONS[0],
       platform: "",
       whereToFind: "",
-      recoveryContact: "",
+      accountIdentifier: "",
+      accountPassword: "",
+      contacts: [],
       notes: "",
     });
   };
 
   const onSave = async () => {
-    if (!form.platform.trim() || !form.whereToFind.trim()) return;
+    if (!form.platform.trim() || !form.whereToFind.trim()) {
+      setStatusTone("error");
+      setStatusMessage("Platform and where to find access details are required.");
+      return;
+    }
+
+    setIsSaving(true);
+    const wasEditing = Boolean(editingId);
     const nextItem: DigitalLegacyRecord = {
       id: editingId ?? crypto.randomUUID(),
       category: form.category,
       platform: form.platform.trim(),
       whereToFind: form.whereToFind.trim(),
-      recoveryContact: form.recoveryContact.trim(),
+      accountIdentifier: form.accountIdentifier.trim() || undefined,
+      accountPassword: form.accountPassword.trim() || undefined,
+      contacts: form.contacts
+        .map((contact) => ({
+          name: contact.name.trim(),
+          method: contact.method.trim(),
+        }))
+        .filter((contact) => contact.name || contact.method)
+        .slice(0, 3),
       notes: form.notes.trim(),
     };
     const nextItems = editingId
       ? items.map((item) => (item.id === editingId ? nextItem : item))
       : [nextItem, ...items];
     setItems(nextItems);
-    setShowForm(false);
+    setShowFormDrawer(false);
     resetForm();
 
     try {
       const vault = (await loadVaultData()) ?? emptyVaultData();
       await saveVaultData({ ...vault, digitalLegacy: nextItems });
-      setStatusMessage(editingId ? "Digital legacy item updated." : "Digital legacy item saved.");
+      setStatusTone("success");
+      setStatusMessage(wasEditing ? "Digital record updated." : "Digital record saved.");
     } catch {
-      setStatusMessage("Cloud sync failed.");
+      setStatusTone("error");
+      setStatusMessage("Saved locally. Cloud backup could not be updated right now.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const onEdit = (item: DigitalLegacyRecord) => {
+    const contacts = normalizeContacts(item);
     setEditingId(item.id);
+    setShowContacts(contacts.length > 0);
+    setShowCredentials(Boolean(item.accountIdentifier || item.accountPassword));
     setForm({
       category: item.category || CATEGORY_OPTIONS[0],
       platform: item.platform || "",
       whereToFind: item.whereToFind || "",
-      recoveryContact: item.recoveryContact || "",
+      accountIdentifier: item.accountIdentifier || "",
+      accountPassword: item.accountPassword || "",
+      contacts,
       notes: item.notes || "",
     });
-    setShowForm(true);
+    setShowFormDrawer(true);
+  };
+
+  const updateContact = (index: number, field: keyof VaultContact, value: string) => {
+    setForm((current) => ({
+      ...current,
+      contacts: current.contacts.map((contact, contactIndex) =>
+        contactIndex === index ? { ...contact, [field]: value } : contact,
+      ),
+    }));
+  };
+
+  const addContact = () => {
+    setForm((current) => {
+      if (current.contacts.length >= 3) {
+        return current;
+      }
+
+      return {
+        ...current,
+        contacts: [...current.contacts, { name: "", method: "" }],
+      };
+    });
+  };
+
+  const removeContact = (index: number) => {
+    setForm((current) => {
+      const nextContacts = current.contacts.filter((_, contactIndex) => contactIndex !== index);
+      return {
+        ...current,
+        contacts: nextContacts,
+      };
+    });
   };
 
   const onDelete = async (id: string) => {
@@ -106,13 +195,15 @@ export default function DigitalLegacyPage() {
     setItems(nextItems);
     if (editingId === id) {
       resetForm();
-      setShowForm(false);
+      setShowFormDrawer(false);
     }
     try {
       const vault = (await loadVaultData()) ?? emptyVaultData();
       await saveVaultData({ ...vault, digitalLegacy: nextItems });
-      setStatusMessage("Digital legacy item deleted.");
+      setStatusTone("success");
+      setStatusMessage("Digital record deleted.");
     } catch {
+      setStatusTone("error");
       setStatusMessage("Delete sync failed.");
     }
   };
@@ -120,6 +211,7 @@ export default function DigitalLegacyPage() {
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
+        <VaultSessionGuard />
         {/* Sticky Header */}
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/70 px-6 py-5 backdrop-blur-lg">
           <Link
@@ -168,98 +260,38 @@ export default function DigitalLegacyPage() {
                     <span className="font-bold">{labeledTotal}</span>{" "}
                     <span className="text-2xl font-semibold text-sky-200">records</span>
                   </h2>
-                  <p className="mt-3 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-slate-300/50">
-                    <span className="material-symbols-outlined text-[14px]">public</span>
-                    {`${items.length} digital items in vault`}
-                  </p>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        <main className="flex-1 space-y-4 px-6 pb-40 pt-4">
+        <main className="flex-1 space-y-4 px-6 pb-36 pt-4">
           <button
             type="button"
             onClick={() => {
-              setShowForm((s) => !s);
-              if (showForm) resetForm();
+              resetForm();
+              setShowFormDrawer(true);
             }}
             className="w-full rounded-3xl border-2 border-dashed border-slate-300 bg-[#f0f2f5] px-6 py-8 text-center transition-all active:scale-[0.99]"
           >
             <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-slate-300 text-white">
-              <span className="material-symbols-outlined text-[20px]">add</span>
+              <span className="material-symbols-outlined text-[20px]">{items.length > 0 ? "public" : "add"}</span>
             </div>
-            <p className="mt-3 text-lg font-bold uppercase tracking-[0.08em] text-slate-500">Update Legacy List</p>
+            <p className="mt-3 text-lg font-bold uppercase tracking-[0.08em] text-slate-500">Update Digital Records</p>
           </button>
 
-          {showForm ? (
-            <section className="glass-card rounded-3xl border border-[#e7eaee] bg-sky-50/70 p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500">
-                  {editingId ? "Edit Entry" : "Add Entry"}
-                </h2>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-slate-500"
-                  onClick={() => {
-                    setShowForm(false);
-                    resetForm();
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-              <div className="space-y-3">
-                <select
-                  className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-sm outline-none focus:border-sky-500"
-                  value={form.category}
-                  onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
-                >
-                  {CATEGORY_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-sm outline-none focus:border-sky-500"
-                  placeholder="Platform (e.g. Instagram, Gmail)"
-                  value={form.platform}
-                  onChange={(e) => setForm((p) => ({ ...p, platform: e.target.value }))}
-                />
-                <input
-                  className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-sm outline-none focus:border-sky-500"
-                  placeholder="Where to find access details"
-                  value={form.whereToFind}
-                  onChange={(e) => setForm((p) => ({ ...p, whereToFind: e.target.value }))}
-                />
-                <input
-                  className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-sm outline-none focus:border-sky-500"
-                  placeholder="Recovery contact (optional)"
-                  value={form.recoveryContact}
-                  onChange={(e) => setForm((p) => ({ ...p, recoveryContact: e.target.value }))}
-                />
-                <textarea
-                  className="h-20 w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-sm outline-none focus:border-sky-500"
-                  placeholder="Notes"
-                  value={form.notes}
-                  onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
-                />
-                <button
-                  className="w-full rounded-[1.3rem] bg-slate-900 py-3 text-sm font-semibold tracking-wide text-white shadow-xl shadow-slate-900/20 transition-all active:scale-[0.98]"
-                  type="button"
-                  onClick={onSave}
-                >
-                  {editingId ? "Update Entry" : "Save Entry"}
-                </button>
-              </div>
-            </section>
-          ) : null}
-
           {statusMessage ? (
-            <div className="glass-card rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3">
-              <p className="text-xs font-medium text-sky-700">{statusMessage}</p>
+            <div
+              className={`glass-card rounded-2xl border px-4 py-3 ${
+                statusTone === "success"
+                  ? "border-emerald-100 bg-emerald-50/80"
+                  : "border-rose-100 bg-rose-50/80"
+              }`}
+            >
+              <p className={`text-xs font-medium ${statusTone === "success" ? "text-emerald-700" : "text-rose-700"}`}>
+                {statusMessage}
+              </p>
             </div>
           ) : null}
           {isLoading ? (
@@ -269,51 +301,259 @@ export default function DigitalLegacyPage() {
               <ListItemSkeleton />
             </>
           ) : null}
-          {!isLoading && !statusMessage && items.length === 0 ? (
+          {!isLoading && items.length === 0 ? (
             <div className="glass-card rounded-3xl border border-[#e7eaee] bg-sky-50/70 p-6 text-center">
               <p className="text-sm font-semibold text-slate-700">No records yet</p>
-              <p className="mt-1 text-xs text-slate-500">Use the update card above to add social media or any digital asset.</p>
+              <p className="mt-1 text-xs text-slate-500">Use the update card above to add an online account, platform, or digital service.</p>
             </div>
           ) : null}
 
           {items.map((item) => (
             <article
               key={item.id}
-              className="glass-card rounded-3xl border border-[#e7eaee] bg-sky-50/70 p-6 transition-all duration-300 hover:-translate-y-[2px]"
+              role="button"
+              tabIndex={0}
+              onClick={() => router.push(`/digital-legacy/${item.id}`)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  router.push(`/digital-legacy/${item.id}`);
+                }
+              }}
+              className="glass-card rounded-3xl border border-[#e7eaee] bg-white/85 p-5 transition-all duration-300 hover:-translate-y-[2px]"
             >
-              <div className="mb-4 flex items-start justify-between">
+              <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
                     <span className="material-symbols-outlined">public</span>
                   </div>
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{item.category}</p>
-                    <h3 className="text-xl font-bold text-slate-900">{item.platform}</h3>
+                    <h3 className="text-lg font-bold text-slate-900">{item.platform}</h3>
+                    <p className="mt-1 text-sm text-slate-500">{item.whereToFind}</p>
                   </div>
                 </div>
-                <span className="rounded-md bg-sky-100 px-2 py-1 text-[10px] font-bold uppercase text-sky-700">
-                  Active
-                </span>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Access Record</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {item.accountIdentifier || item.accountPassword ? "Has credentials" : "Reference only"}
+                  </p>
+                </div>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-white/80 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Where To Find</p>
-                <p className="text-sm font-medium text-slate-800">{item.whereToFind}</p>
-                {item.recoveryContact ? (
-                  <p className="mt-1 text-xs text-slate-500">Recovery contact: {item.recoveryContact}</p>
-                ) : null}
-                {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
-              </div>
-              <div className="mt-4 flex items-center justify-end gap-3">
-                <button className="text-xs font-semibold text-sky-700" type="button" onClick={() => onEdit(item)}>
-                  Edit
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-700 transition-colors hover:bg-slate-50"
+                  type="button"
+                  aria-label={`View ${item.platform}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    router.push(`/digital-legacy/${item.id}`);
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[18px]">visibility</span>
                 </button>
-                <button className="text-xs font-semibold text-red-600" type="button" onClick={() => onDelete(item.id)}>
-                  Delete
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 transition-colors hover:bg-sky-200"
+                  type="button"
+                  aria-label={`Edit ${item.platform}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEdit(item);
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[18px]">edit</span>
+                </button>
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-100 text-rose-700 transition-colors hover:bg-rose-200"
+                  type="button"
+                  aria-label={`Delete ${item.platform}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPendingDeleteId(item.id);
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[18px]">delete</span>
                 </button>
               </div>
             </article>
           ))}
         </main>
+
+        <RecordListDrawer
+          open={showFormDrawer}
+          title={editingId ? "Edit Digital Record" : "Add Digital Record"}
+          onClose={() => {
+            setShowFormDrawer(false);
+            resetForm();
+          }}
+          footer={
+            <button
+              className="w-full rounded-[1.3rem] bg-slate-900 py-3 text-sm font-semibold tracking-wide text-white shadow-xl shadow-slate-900/20 transition-all active:scale-[0.98]"
+              type="button"
+              onClick={onSave}
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : editingId ? "Update Digital Record" : "Save Digital Record"}
+            </button>
+          }
+        >
+          <div className="space-y-4 pt-2">
+            <div className="px-1">
+              <p className="text-xs leading-5 text-slate-500">
+                Record the account, where access details live, and add login or contact help only if you need it.
+              </p>
+            </div>
+
+            <section className="rounded-[1.7rem] border border-slate-200 bg-white p-4 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.28)]">
+              <div className="space-y-3">
+                <FloatingField label="Category" labelClassName="text-sky-700">
+                  <CustomSelect
+                    value={form.category}
+                    options={CATEGORY_OPTIONS.map((option) => ({ label: option, value: option }))}
+                    onChange={(value) => setForm((p) => ({ ...p, category: value }))}
+                    accentClassName="text-sky-700"
+                  />
+                </FloatingField>
+                <FloatingField label="Platform" labelClassName="text-sky-700">
+                  <input
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
+                    placeholder="Platform or service (e.g. Instagram, Gmail)"
+                    value={form.platform}
+                    onChange={(e) => setForm((p) => ({ ...p, platform: e.target.value }))}
+                  />
+                </FloatingField>
+                <FloatingField label="Access Where" labelClassName="text-sky-700">
+                  <input
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
+                    placeholder="Where are login, recovery, or access details kept?"
+                    value={form.whereToFind}
+                    onChange={(e) => setForm((p) => ({ ...p, whereToFind: e.target.value }))}
+                  />
+                </FloatingField>
+              </div>
+            </section>
+
+            <section className="rounded-[1.7rem] border border-slate-200 bg-[#fbfcfd] p-4 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.24)]">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Login Help</p>
+                  <p className="mt-1 text-xs text-slate-500">Optional</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCredentials((current) => !current)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-700"
+                  aria-label={showCredentials ? "Hide optional login details" : "Show optional login details"}
+                >
+                  {showCredentials ? "Hide" : "Add"}
+                </button>
+              </div>
+              {showCredentials ? (
+                <div className="space-y-3">
+                  <FloatingField label="Login Email / Username" labelClassName="text-sky-700" backgroundClassName="bg-[#fbfcfd]">
+                    <input
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
+                      placeholder="Email or username"
+                      value={form.accountIdentifier}
+                      onChange={(e) => setForm((p) => ({ ...p, accountIdentifier: e.target.value }))}
+                    />
+                  </FloatingField>
+                  <FloatingField label="Account Password" labelClassName="text-sky-700" backgroundClassName="bg-[#fbfcfd]">
+                    <input
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
+                      placeholder="Account password"
+                      value={form.accountPassword}
+                      onChange={(e) => setForm((p) => ({ ...p, accountPassword: e.target.value }))}
+                    />
+                  </FloatingField>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="rounded-[1.7rem] border border-slate-200 bg-[#fbfcfd] p-4 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.24)]">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Contacts</p>
+                  <p className="mt-1 text-xs text-slate-500">Optional</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowContacts((current) => !current)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-700"
+                    aria-label={showContacts ? "Hide optional contacts" : "Show optional contacts"}
+                  >
+                    {showContacts ? "Hide" : "Show"}
+                  </button>
+                  {showContacts && form.contacts.length < 3 ? (
+                    <button type="button" onClick={addContact} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-700">
+                      Add
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              {showContacts ? (
+                <div className="space-y-2.5">
+                  {form.contacts.length > 0
+                    ? form.contacts.map((contact, contactIndex) => (
+                        <div key={`digital-form-contact-${contactIndex}`} className="rounded-[1.25rem] border border-slate-200 bg-white p-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Contact {contactIndex + 1}</p>
+                            <button
+                              type="button"
+                              onClick={() => removeContact(contactIndex)}
+                              className="text-[11px] font-semibold text-rose-700"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            <input
+                              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none transition-colors focus:border-sky-500"
+                              placeholder="Who to contact?"
+                              value={contact.name}
+                              onChange={(e) => updateContact(contactIndex, "name", e.target.value)}
+                            />
+                            <input
+                              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none transition-colors focus:border-sky-500"
+                              placeholder="How to contact them?"
+                              value={contact.method}
+                              onChange={(e) => updateContact(contactIndex, "method", e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    : null}
+                </div>
+              ) : null}
+            </section>
+
+            <FloatingField label="Notes" labelClassName="text-sky-700">
+              <textarea
+                className="h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
+                placeholder="Notes, recovery steps, or account instructions"
+                value={form.notes}
+                onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+              />
+            </FloatingField>
+          </div>
+        </RecordListDrawer>
+
+        <ConfirmActionModal
+          open={pendingDeleteId !== null}
+          title="Delete this digital record?"
+          description="This digital legacy record will be removed from the vault on this device."
+          confirmLabel="Delete Digital Record"
+          onCancel={() => setPendingDeleteId(null)}
+          onConfirm={() => {
+            if (!pendingDeleteId) {
+              return;
+            }
+            const id = pendingDeleteId;
+            setPendingDeleteId(null);
+            void onDelete(id);
+          }}
+        />
 
         {isLoading ? (
           <div className="glass fixed bottom-0 left-0 right-0 border-t border-white/50 bg-white/80 pb-6 pt-3">
@@ -324,7 +564,7 @@ export default function DigitalLegacyPage() {
             </div>
           </div>
         ) : (
-          <AppBottomNav active="wishes" mode="default" />
+          <AppBottomNav active="assets" mode="dashboard" />
         )}
       </div>
     </div>

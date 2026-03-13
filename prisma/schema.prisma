@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -11,11 +11,11 @@ model Vault {
   id                 String   @id @default(cuid())
   userId             String   @unique
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ciphertext         String   @db.Text
+  ciphertext         String
   iv                 String
   authTag            String
-  wrappedDekPass     String   @db.Text
-  wrappedDekRecovery String   @db.Text
+  wrappedDekPass     String
+  wrappedDekRecovery String
   saltPass           String
   saltRecovery       String
   kdfParams          Json
@@ -26,31 +26,95 @@ model Vault {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  vault     Vault?
-  otps      EmailOtp[]
-  sessions  Session[]
-}
-
-model EmailOtp {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash     String
-  expiresAt    DateTime
-  usedAt       DateTime?
-  attempts     Int      @default(0)
-  createdAt    DateTime @default(now())
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  vault         Vault?
+  accounts      Account[]
+  sessions      Session[]
+  readinessSnapshots UserReadinessSnapshot[]
+  checklistProgress  UserChecklistProgress?
+  privacyConsent     UserPrivacyConsent?
 }
 
 model Session {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash   String   @unique
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model UserReadinessSnapshot {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readinessPercent Int
+  completedCount  Int
+  totalCount      Int
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model UserChecklistProgress {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetsMapped       Boolean  @default(false)
+  debtsRecorded      Boolean  @default(false)
+  digitalLegacyAdded Boolean  @default(false)
+  wishesCompleted    Boolean  @default(false)
+  trustedContactAdded Boolean @default(false)
+  recoveryKeySaved   Boolean  @default(false)
+  recoveryTested     Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+}
+
+model UserPrivacyConsent {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  backupEnabled Boolean  @default(false)
+  consentedAt  DateTime?
+  revokedAt    DateTime?
+  updatedAt    DateTime  @updatedAt
 }

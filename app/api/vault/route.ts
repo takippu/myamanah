@@ -3,9 +3,17 @@ import { prisma } from "@/lib/prisma";
 import { encryptedVaultPayloadSchema } from "@/lib/vault-schema";
 import { getAuthUserFromRequest } from "@/lib/auth";
 
-export async function GET(req: Request) {
+async function hasBackupConsent(userId: string) {
+  const consent = await prisma.userPrivacyConsent.findUnique({ where: { userId } });
+  return Boolean(consent?.backupEnabled);
+}
+
+export async function GET() {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasBackupConsent(user.id))) {
+    return NextResponse.json({ error: "Backup consent required" }, { status: 403 });
+  }
 
   const vault = await prisma.vault.findUnique({ where: { userId: user.id } });
   if (!vault) {
@@ -30,14 +38,14 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasBackupConsent(user.id))) {
+    return NextResponse.json({ error: "Backup consent required" }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => null);
   const parsed = encryptedVaultPayloadSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid encrypted payload", details: parsed.error.flatten() },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid encrypted payload" }, { status: 400 });
   }
 
   const updated = await prisma.vault.upsert({
@@ -56,4 +64,12 @@ export async function PUT(req: Request) {
     schemaVersion: updated.schemaVersion,
     updatedAt: updated.updatedAt,
   });
+}
+
+export async function DELETE() {
+  const user = await getAuthUserFromRequest();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await prisma.vault.deleteMany({ where: { userId: user.id } });
+  return NextResponse.json({ ok: true });
 }

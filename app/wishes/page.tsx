@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppBottomNav } from "../components/app-bottom-nav";
 import { HeroSkeleton, FormSkeleton } from "../components/skeletons";
+import { VaultSessionGuard } from "../components/vault-session-guard";
 import { emptyVaultData } from "@/lib/vault-data";
 import { loadVaultData, saveVaultData } from "@/lib/vault-client";
 
@@ -77,7 +78,7 @@ export default function WishesPage() {
       setStatusMessage("Wishes saved successfully.");
       setTimeout(() => setStatusMessage(null), 3000);
     } catch {
-      setStatusMessage("Failed to save wishes. Please try again.");
+      setStatusMessage("Saved locally. Cloud backup could not be updated right now.");
     } finally {
       setIsSaving(false);
     }
@@ -86,6 +87,7 @@ export default function WishesPage() {
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
+        <VaultSessionGuard />
         {/* Sticky Header */}
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/70 px-6 py-5 backdrop-blur-lg">
           <Link
@@ -146,7 +148,7 @@ export default function WishesPage() {
           )}
         </div>
 
-        <main className="flex-1 space-y-4 px-6 pb-40 pt-4">
+        <main className="flex-1 space-y-4 px-6 pb-36 pt-4">
           {statusMessage ? (
             <div className={`glass-card rounded-2xl border px-4 py-3 ${statusMessage.includes("success") ? "border-emerald-100 bg-emerald-50/80" : "border-rose-100 bg-rose-50/80"}`}>
               <p className={`text-xs font-medium ${statusMessage.includes("success") ? "text-emerald-700" : "text-rose-700"}`}>{statusMessage}</p>
@@ -270,7 +272,7 @@ export default function WishesPage() {
             </div>
           </div>
         ) : (
-          <AppBottomNav active="wishes" mode="default" />
+          <AppBottomNav active="assets" mode="dashboard" />
         )}
       </div>
     </div>

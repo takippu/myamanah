@@ -6,6 +6,10 @@ import { getAuthUserFromRequest } from "@/lib/auth";
 export async function POST(req: Request) {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const consent = await prisma.userPrivacyConsent.findUnique({ where: { userId: user.id } });
+  if (!consent?.backupEnabled) {
+    return NextResponse.json({ error: "Backup consent required" }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => null);
   const parsed = encryptedVaultPayloadSchema.safeParse(body);

@@ -2,13 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppBottomNav } from "../components/app-bottom-nav";
-import { getVaultStatus, loadVaultData } from "@/lib/vault-client";
+import { VaultSessionGuard } from "../components/vault-session-guard";
+import { authClient } from "@/lib/auth-client";
+import { clearVaultSecrets } from "@/lib/vault-session";
+import {
+  disableCloudBackup,
+  enableCloudBackup,
+  getCloudBackupStatus,
+  getLocalProfileName,
+  getVaultStatus,
+  loadVaultData,
+} from "@/lib/vault-client";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState<string>("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [recoveryVerifiedAt, setRecoveryVerifiedAt] = useState<string | null>(null);
   const [recordCounts, setRecordCounts] = useState({
@@ -18,18 +30,31 @@ export default function SettingsPage() {
     total: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [backupEnabled, setBackupEnabled] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [showLockConfirm, setShowLockConfirm] = useState(false);
+  const [localProfileName, setLocalProfileName] = useState<string>("");
 
   const refreshData = async () => {
     try {
+      setLocalProfileName(getLocalProfileName() ?? "");
+
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (authRes.ok) {
-        const user = await authRes.json();
-        setEmail(user.email ?? "");
+        const payload = (await authRes.json()) as { user?: { email?: string } };
+        setEmail(payload.user?.email ?? "");
+        setIsAuthenticated(true);
+      } else {
+        setEmail("");
+        setIsAuthenticated(false);
       }
 
       const status = await getVaultStatus();
       setLastSynced(status?.updatedAt ?? null);
       setRecoveryVerifiedAt(status?.recoveryVerifiedAt ?? null);
+      const backupStatus = await getCloudBackupStatus();
+      setBackupEnabled(backupStatus.backupEnabled);
 
       const vault = await loadVaultData();
       const assets = vault?.assets?.length ?? 0;
@@ -52,6 +77,29 @@ export default function SettingsPage() {
     void refreshData();
   }, []);
 
+  useEffect(() => {
+    const shouldEnableBackup = searchParams.get("enableBackup") === "1";
+    if (!shouldEnableBackup || !isAuthenticated || backupEnabled || backupBusy) {
+      return;
+    }
+
+    setBackupBusy(true);
+    setBackupMessage(null);
+    void enableCloudBackup()
+      .then(() => {
+        setBackupEnabled(true);
+        setBackupMessage("Encrypted cloud backup enabled.");
+        router.replace("/settings");
+      })
+      .catch(() => {
+        setBackupMessage("Could not enable cloud backup.");
+        router.replace("/settings");
+      })
+      .finally(() => {
+        setBackupBusy(false);
+      });
+  }, [backupBusy, backupEnabled, isAuthenticated, router, searchParams]);
+
   // Refresh when page becomes visible
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -65,14 +113,15 @@ export default function SettingsPage() {
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-      // Clear session storage
-      sessionStorage.removeItem("vault_session");
-      router.push("/login");
+      if (isAuthenticated) {
+        await authClient.signOut();
+      }
     } catch {
-      // Force redirect even if logout fails
-      router.push("/login");
+      // Fall through and clear only the local unlock session.
     }
+
+    clearVaultSecrets();
+    router.push("/access");
   };
 
   const formatDate = (dateStr: string | null): string => {
@@ -84,9 +133,47 @@ export default function SettingsPage() {
     });
   };
 
+  const handleEnableBackup = async () => {
+    if (!isAuthenticated) {
+      setBackupMessage(null);
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/settings?enableBackup=1",
+      });
+      return;
+    }
+
+    setBackupBusy(true);
+    setBackupMessage(null);
+    try {
+      await enableCloudBackup();
+      setBackupEnabled(true);
+      setBackupMessage("Encrypted cloud backup enabled.");
+    } catch {
+      setBackupMessage("Could not enable cloud backup.");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleDisableBackup = async () => {
+    setBackupBusy(true);
+    setBackupMessage(null);
+    try {
+      await disableCloudBackup();
+      setBackupEnabled(false);
+      setBackupMessage("Cloud backup disabled and remote copy removed.");
+    } catch {
+      setBackupMessage("Could not disable cloud backup.");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
+        <VaultSessionGuard />
         {/* Header */}
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/70 px-6 py-5 backdrop-blur-lg">
           <Link
@@ -102,19 +189,26 @@ export default function SettingsPage() {
           </div>
         </header>
 
-        <main className="flex-1 space-y-6 px-6 pb-32 pt-4">
+        <main className="flex-1 space-y-6 px-6 pb-36 pt-4">
           {/* Profile Card */}
           <div className="glass-card rounded-[2rem] border border-[#e4e6eb] bg-white p-6 shadow-[0_12px_28px_-18px_rgba(0,0,0,0.35)]">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
-                <span className="material-symbols-outlined text-[32px]">person</span>
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Signed in as</p>
-                <p className="text-base font-semibold text-slate-900">{email || "Loading..."}</p>
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
+                  <span className="material-symbols-outlined text-[32px]">person</span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                    {localProfileName ? "Vault name" : isAuthenticated ? "Signed in as" : "Mode"}
+                  </p>
+                  <p className="text-base font-semibold text-slate-900">
+                    {localProfileName || (isAuthenticated ? email || "Loading..." : "Local-only vault")}
+                  </p>
+                  {localProfileName && isAuthenticated ? (
+                    <p className="text-[10px] text-slate-400">{email || "Signed in"}</p>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
 
           {/* Vault Stats */}
           <section className="space-y-3">
@@ -211,20 +305,87 @@ export default function SettingsPage() {
 
                 <div className="border-t border-slate-100" />
 
-                <button
-                  type="button"
-                  onClick={() => router.push("/restore")}
-                  className="flex w-full items-center justify-between py-1"
+                <Link 
+                  href="/access"
+                  className="flex items-center justify-between py-1"
                 >
                   <div className="flex items-center gap-3">
                     <span className="material-symbols-outlined text-amber-600">key</span>
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">Recovery Options</p>
-                      <p className="text-[10px] text-slate-400">Restore or test recovery</p>
+                      <p className="text-sm font-semibold text-slate-900">Unlock Vault</p>
+                      <p className="text-[10px] text-slate-400">Re-enter your local access keys</p>
                     </div>
                   </div>
                   <span className="material-symbols-outlined text-slate-300">chevron_right</span>
-                </button>
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          {/* Backup Consent */}
+          <section className="space-y-3">
+            <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
+              Backup Consent
+            </p>
+
+            <div className="glass-card rounded-[1.8rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_8px_20px_-14px_rgba(0,0,0,0.25)]">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-slate-400">cloud_sync</span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Encrypted Cloud Backup</p>
+                      <p className="text-[10px] text-slate-400">
+                        {backupEnabled
+                          ? "Enabled by consent"
+                          : isAuthenticated
+                            ? "Disabled until you opt in"
+                            : "Local-only until you sign in and opt in"}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                      backupEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {backupEnabled ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
+
+                <div className="border-t border-slate-100" />
+
+                <div className="flex gap-2">
+                  {backupEnabled ? (
+                    <button
+                      type="button"
+                      onClick={handleDisableBackup}
+                      disabled={backupBusy}
+                      className="w-full rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-xs font-semibold text-rose-700 disabled:opacity-60"
+                    >
+                      {backupBusy ? "Updating..." : "Disable Backup"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleEnableBackup}
+                      disabled={backupBusy}
+                      className="w-full rounded-xl border border-emerald-200 bg-emerald-50 py-2.5 text-xs font-semibold text-emerald-700 disabled:opacity-60"
+                    >
+                      {backupBusy ? "Updating..." : "Enable Backup"}
+                    </button>
+                  )}
+                </div>
+
+                {backupMessage ? (
+                  <p className="text-[11px] text-slate-500">{backupMessage}</p>
+                ) : null}
+
+                {!isAuthenticated ? (
+                  <p className="text-[11px] text-slate-500">
+                    Google sign-in is only required when you choose encrypted cloud sync.
+                  </p>
+                ) : null}
               </div>
             </div>
           </section>
@@ -257,16 +418,19 @@ export default function SettingsPage() {
           </section>
 
           {/* Logout */}
-          <div className="pt-4">
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center justify-center gap-3 rounded-[2rem] border-2 border-rose-200 bg-rose-50 py-5 text-sm font-semibold tracking-wide text-rose-700 transition-all active:scale-[0.97]"
-            >
-              <span className="material-symbols-outlined">logout</span>
-              Sign Out
-            </button>
-          </div>
+            <div className="pt-4">
+              <button
+                type="button"
+                onClick={() => setShowLockConfirm(true)}
+                className="flex w-full items-center justify-center gap-3 rounded-[2rem] border-2 border-rose-200 bg-rose-50 py-5 text-sm font-semibold tracking-wide text-rose-700 transition-all active:scale-[0.97]"
+              >
+                <span className="material-symbols-outlined">logout</span>
+                {isAuthenticated ? "Sign Out and Lock Vault" : "Lock Vault on This Device"}
+              </button>
+              <p className="mt-2 text-center text-[11px] text-slate-500">
+                This removes current access only. Your local vault stays on this device.
+              </p>
+            </div>
         </main>
 
         {isLoading ? (
@@ -280,6 +444,51 @@ export default function SettingsPage() {
         ) : (
           <AppBottomNav active="settings" mode="dashboard" />
         )}
+
+        {showLockConfirm ? (
+          <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 px-4 pb-6 pt-12 sm:items-center sm:justify-center">
+            <div className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.45)]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                  <span className="material-symbols-outlined">warning</span>
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-lg font-semibold text-slate-900">Lock this vault?</h2>
+                  <p className="text-sm leading-relaxed text-slate-600">
+                    This will remove access on this device until you unlock it again.
+                  </p>
+                  <p className="text-sm leading-relaxed text-slate-600">
+                    You will need both your <span className="font-semibold text-slate-900">passphrase</span> and
+                    <span className="font-semibold text-slate-900"> recovery key</span> to get back in.
+                  </p>
+                  <p className="text-xs leading-relaxed text-rose-700">
+                    Do not continue unless you have both available.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLockConfirm(false)}
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setShowLockConfirm(false);
+                    await handleLogout();
+                  }}
+                  className="flex-1 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700"
+                >
+                  Lock Vault
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

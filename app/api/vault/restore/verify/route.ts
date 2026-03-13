@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUserFromRequest } from "@/lib/auth";
 
-export async function POST(req: Request) {
+export async function POST() {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const consent = await prisma.userPrivacyConsent.findUnique({ where: { userId: user.id } });
+  if (!consent?.backupEnabled) {
+    return NextResponse.json({ error: "Backup consent required" }, { status: 403 });
+  }
 
   const vault = await prisma.vault.findUnique({ where: { userId: user.id } });
   if (!vault) {
