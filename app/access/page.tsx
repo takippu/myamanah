@@ -28,6 +28,7 @@ export default function AccessSetupPage() {
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied">("idle");
 
   useEffect(() => {
     let cancelled = false;
@@ -160,14 +161,27 @@ export default function AccessSetupPage() {
 
   const copyRecoveryKey = () => {
     navigator.clipboard.writeText(recoveryKey);
-    // Show temporary feedback
-    const btn = document.getElementById("copy-btn");
-    if (btn) {
-      const original = btn.textContent;
-      btn.textContent = "Copied!";
-      setTimeout(() => (btn.textContent = original), 2000);
-    }
+    setCopyFeedback("copied");
+    window.setTimeout(() => setCopyFeedback("idle"), 2000);
   };
+
+  const existingAccountPrompt = (
+    <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+        Existing Account
+      </p>
+      <p className="mt-1 text-sm text-slate-500">
+        Already enabled encrypted Google backup before? Sign in to continue with that account.
+      </p>
+      <button
+        type="button"
+        onClick={() => router.push("/login")}
+        className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-colors hover:border-slate-500 hover:text-slate-950"
+      >
+        Sign in to Existing Account
+      </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
@@ -282,6 +296,8 @@ export default function AccessSetupPage() {
               >
                 Start a new vault on this device
               </button>
+
+              {existingAccountPrompt}
             </div>
           )}
 
@@ -363,6 +379,8 @@ export default function AccessSetupPage() {
                 Continue
                 <span className="material-symbols-outlined">arrow_forward</span>
               </button>
+
+              {existingAccountPrompt}
             </div>
           )}
 
@@ -398,13 +416,12 @@ export default function AccessSetupPage() {
                   </button>
                 </div>
                 <button
-                  id="copy-btn"
                   type="button"
                   onClick={copyRecoveryKey}
                   className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white py-3 text-sm font-semibold text-amber-700 transition-all active:scale-[0.98]"
                 >
                   <span className="material-symbols-outlined">content_copy</span>
-                  Copy to Clipboard
+                  {copyFeedback === "copied" ? "Copied!" : "Copy to Clipboard"}
                 </button>
               </div>
 

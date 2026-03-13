@@ -13,7 +13,6 @@ import {
   getCloudBackupStatus,
   getLocalProfileName,
   getVaultStatus,
-  loadVaultData,
 } from "@/lib/vault-client";
 
 export default function SettingsPage() {
@@ -22,13 +21,6 @@ export default function SettingsPage() {
   const [email, setEmail] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
-  const [recoveryVerifiedAt, setRecoveryVerifiedAt] = useState<string | null>(null);
-  const [recordCounts, setRecordCounts] = useState({
-    assets: 0,
-    debts: 0,
-    digitalLegacy: 0,
-    total: 0,
-  });
   const [isLoading, setIsLoading] = useState(true);
   const [backupEnabled, setBackupEnabled] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
@@ -52,20 +44,8 @@ export default function SettingsPage() {
 
       const status = await getVaultStatus();
       setLastSynced(status?.updatedAt ?? null);
-      setRecoveryVerifiedAt(status?.recoveryVerifiedAt ?? null);
       const backupStatus = await getCloudBackupStatus();
       setBackupEnabled(backupStatus.backupEnabled);
-
-      const vault = await loadVaultData();
-      const assets = vault?.assets?.length ?? 0;
-      const debts = vault?.debts?.length ?? 0;
-      const digitalLegacy = vault?.digitalLegacy?.length ?? 0;
-      setRecordCounts({
-        assets,
-        debts,
-        digitalLegacy,
-        total: assets + debts + digitalLegacy,
-      });
     } catch {
       // Silent fail
     } finally {
@@ -210,123 +190,9 @@ export default function SettingsPage() {
               </div>
             </div>
 
-          {/* Vault Stats */}
-          <section className="space-y-3">
-            <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Vault Statistics</p>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div className="glass-card rounded-2xl border border-[#e4e6eb] bg-white p-4 text-center">
-                <p className="text-2xl font-bold text-emerald-600">{isLoading ? "-" : recordCounts.assets}</p>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Assets</p>
-              </div>
-              <div className="glass-card rounded-2xl border border-[#e4e6eb] bg-white p-4 text-center">
-                <p className="text-2xl font-bold text-rose-600">{isLoading ? "-" : recordCounts.debts}</p>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Debts</p>
-              </div>
-              <div className="glass-card rounded-2xl border border-[#e4e6eb] bg-white p-4 text-center">
-                <p className="text-2xl font-bold text-sky-600">{isLoading ? "-" : recordCounts.digitalLegacy}</p>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Digital</p>
-              </div>
-              <div className="glass-card rounded-2xl border border-[#e4e6eb] bg-white p-4 text-center">
-                <p className="text-2xl font-bold text-slate-800">{isLoading ? "-" : recordCounts.total}</p>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total</p>
-              </div>
-            </div>
-          </section>
-
-          {/* Account Info */}
-          <section className="space-y-3">
-            <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Account</p>
-            
-            <div className="glass-card rounded-[1.8rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_8px_20px_-14px_rgba(0,0,0,0.25)]">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-slate-400">sync</span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Last Synced</p>
-                      <p className="text-[10px] text-slate-400">Cloud backup</p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-slate-600">{formatDate(lastSynced)}</span>
-                </div>
-
-                <div className="border-t border-slate-100" />
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-slate-400">verified</span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Recovery Tested</p>
-                      <p className="text-[10px] text-slate-400">Last verified</p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-slate-600">{formatDate(recoveryVerifiedAt)}</span>
-                </div>
-
-                <div className="border-t border-slate-100" />
-
-                <Link 
-                  href="/checklist"
-                  className="flex items-center justify-between py-1"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-emerald-600">fact_check</span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Readiness Checklist</p>
-                      <p className="text-[10px] text-slate-400">View completion status</p>
-                    </div>
-                  </div>
-                  <span className="material-symbols-outlined text-slate-300">chevron_right</span>
-                </Link>
-              </div>
-            </div>
-          </section>
-
-          {/* Security */}
-          <section className="space-y-3">
-            <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Security</p>
-            
-            <div className="glass-card rounded-[1.8rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_8px_20px_-14px_rgba(0,0,0,0.25)]">
-              <div className="space-y-4">
-                <Link 
-                  href="/vault"
-                  className="flex items-center justify-between py-1"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-emerald-600">verified_user</span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">View Vault</p>
-                      <p className="text-[10px] text-slate-400">Assets, debts, wishes</p>
-                    </div>
-                  </div>
-                  <span className="material-symbols-outlined text-slate-300">chevron_right</span>
-                </Link>
-
-                <div className="border-t border-slate-100" />
-
-                <Link 
-                  href="/access"
-                  className="flex items-center justify-between py-1"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-amber-600">key</span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Unlock Vault</p>
-                      <p className="text-[10px] text-slate-400">Re-enter your local access keys</p>
-                    </div>
-                  </div>
-                  <span className="material-symbols-outlined text-slate-300">chevron_right</span>
-                </Link>
-              </div>
-            </div>
-          </section>
-
           {/* Backup Consent */}
           <section className="space-y-3">
-            <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
-              Backup Consent
-            </p>
+            <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Backup & Privacy</p>
 
             <div className="glass-card rounded-[1.8rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_8px_20px_-14px_rgba(0,0,0,0.25)]">
               <div className="space-y-4">
@@ -351,6 +217,19 @@ export default function SettingsPage() {
                   >
                     {backupEnabled ? "Enabled" : "Disabled"}
                   </span>
+                </div>
+
+                <div className="border-t border-slate-100" />
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-slate-400">sync</span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Last Synced</p>
+                      <p className="text-[10px] text-slate-400">Encrypted backup only</p>
+                    </div>
+                  </div>
+                  <span className="text-sm text-slate-600">{formatDate(lastSynced)}</span>
                 </div>
 
                 <div className="border-t border-slate-100" />
@@ -386,6 +265,10 @@ export default function SettingsPage() {
                     Google sign-in is only required when you choose encrypted cloud sync.
                   </p>
                 ) : null}
+
+                <p className="text-[11px] text-slate-500">
+                  Your vault data stays encrypted locally by default. Cloud backup is optional and stored as encrypted data only after you opt in.
+                </p>
               </div>
             </div>
           </section>
@@ -395,29 +278,21 @@ export default function SettingsPage() {
             <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">About</p>
             
             <div className="glass-card rounded-[1.8rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_8px_20px_-14px_rgba(0,0,0,0.25)]">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-slate-400">info</span>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Version</p>
-                    <p className="text-[10px] text-slate-400">1.0.0 (MVP)</p>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-100" />
-
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-slate-400">shield</span>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Encryption</p>
-                    <p className="text-[10px] text-slate-400">AES-256-GCM + Argon2id</p>
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-slate-900">MyAmanah MVP</p>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  Local-first digital legacy vault with zero-knowledge encryption and optional encrypted cloud backup.
+                </p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                  AES-256-GCM + Argon2id
+                </p>
               </div>
             </div>
           </section>
 
-          {/* Logout */}
+          {/* Session */}
+          <section className="space-y-3">
+            <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Session</p>
             <div className="pt-4">
               <button
                 type="button"
@@ -431,6 +306,7 @@ export default function SettingsPage() {
                 This removes current access only. Your local vault stays on this device.
               </p>
             </div>
+          </section>
         </main>
 
         {isLoading ? (
