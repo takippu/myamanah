@@ -96,10 +96,12 @@ export default function VaultPage() {
       setVault(vault ?? emptyVaultData());
       if (authRes.ok) {
         const channels = await getTrustedContactReleaseChannels();
-        setReleaseChannels(
-          Object.fromEntries(channels.map((channel) => [channel.trustedContactId, channel])),
-        );
+        console.log("[Vault] Loaded release channels:", channels);
+        const channelsMap = Object.fromEntries(channels.map((channel) => [channel.trustedContactId, channel]));
+        console.log("[Vault] Release channels map:", channelsMap);
+        setReleaseChannels(channelsMap);
       } else {
+        console.log("[Vault] Not authenticated, clearing release channels");
         setReleaseChannels({});
       }
       const debts = vault?.debts?.length ?? 0;
@@ -408,12 +410,12 @@ export default function VaultPage() {
             {/* Trusted Contacts Section */}
             <div className="rounded-[1.75rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.06)]">
               {/* Header row with title and buttons */}
-              <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Trusted Contacts</p>
-                  <h3 className="mt-1 text-lg font-semibold text-slate-900">Deadman switch recipients</h3>
+                  <h3 className="mt-1 text-lg font-semibold text-slate-900 leading-tight">Deadman switch recipients</h3>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {canSendTestEmail && (
                     <button
                       type="button"
@@ -447,7 +449,7 @@ export default function VaultPage() {
                 {(vault?.trustedContacts.length ?? 0) > 0 ? (
                   vault?.trustedContacts.map((contact) => {
                     const channel = releaseChannels[contact.id];
-                    const hasReleaseEmail = !!channel?.releaseEmail;
+                    console.log("[Vault] Rendering contact:", contact.name, { channel, releaseChannelsKeys: Object.keys(releaseChannels) });
                     return (
                       <TrustedContactCard
                         key={contact.id}
@@ -455,9 +457,8 @@ export default function VaultPage() {
                         releaseChannel={channel}
                         onEdit={() => openTrustedForm(contact)}
                         onDelete={() => void deleteTrustedContact(contact.id)}
-                        canNotify={hasReleaseEmail}
-                        onNotify={hasReleaseEmail ? () => {
-                          openNotifyDialog(contact.id, contact.name, channel!.releaseEmail);
+                        onNotify={channel?.releaseEmail ? () => {
+                          openNotifyDialog(contact.id, contact.name, channel.releaseEmail);
                         } : undefined}
                       />
                     );
@@ -735,15 +736,16 @@ function TrustedContactCard({
   onEdit,
   onDelete,
   onNotify,
-  canNotify,
 }: {
   contact: { id: string; name: string; relation?: string; contact?: string };
   releaseChannel?: TrustedContactReleaseChannel;
   onEdit: () => void;
   onDelete: () => void;
   onNotify?: () => void;
-  canNotify?: boolean;
 }) {
+  const hasReleaseEmail = !!releaseChannel?.releaseEmail;
+  console.log("[TrustedContactCard]", contact.name, { hasReleaseEmail, onNotify: !!onNotify, releaseEmail: releaseChannel?.releaseEmail });
+  
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-sm transition-all hover:shadow-md">
       {/* Top accent bar */}
@@ -752,11 +754,11 @@ function TrustedContactCard({
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           {/* Left: Avatar + Info */}
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-700">
               <span className="material-symbols-outlined text-[22px]">person</span>
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-slate-900">{contact.name}</p>
               <p className="text-xs text-slate-500">{contact.relation || "Trusted contact"}</p>
               
@@ -771,8 +773,8 @@ function TrustedContactCard({
           </div>
           
           {/* Right: Actions */}
-          <div className="flex items-center gap-1.5">
-            {canNotify && onNotify && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {hasReleaseEmail && onNotify && (
               <button 
                 type="button" 
                 className="flex h-9 items-center justify-center gap-1 rounded-xl bg-sky-50 px-3 text-sky-700 transition-colors hover:bg-sky-100" 
