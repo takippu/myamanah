@@ -58,7 +58,7 @@ export default function LandingPage() {
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/70 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white">
-              <span className="material-symbols-outlined text-[20px]">shield</span>
+              <span className="material-symbols-outlined text-[20px]">verified_user</span>
             </div>
             <span className="text-lg font-bold text-slate-800">MyAmanah</span>
           </div>
@@ -235,7 +235,7 @@ export default function LandingPage() {
         <footer className="border-t border-slate-200 bg-white px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-slate-400">shield</span>
+              <span className="material-symbols-outlined text-slate-400">verified_user</span>
               <span className="text-sm font-semibold text-slate-600">MyAmanah</span>
             </div>
             <p className="text-xs text-slate-400">Privacy-first digital legacy</p>
