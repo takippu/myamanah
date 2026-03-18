@@ -360,6 +360,7 @@ export default function VaultPage() {
                     <FloatingField label="Name" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
                       <input
                         className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        placeholder="e.g. Ahmad bin Abdullah"
                         value={trustedForm.name}
                         onChange={(event) => setTrustedForm((current) => ({ ...current, name: event.target.value }))}
                       />
@@ -367,6 +368,7 @@ export default function VaultPage() {
                     <FloatingField label="Relation" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
                       <input
                         className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        placeholder="e.g. Brother, Wife, Son"
                         value={trustedForm.relation}
                         onChange={(event) => setTrustedForm((current) => ({ ...current, relation: event.target.value }))}
                       />
@@ -374,6 +376,7 @@ export default function VaultPage() {
                     <FloatingField label="How To Reach" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
                       <input
                         className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        placeholder="e.g. WhatsApp +6012-345-6789"
                         value={trustedForm.contact}
                         onChange={(event) => setTrustedForm((current) => ({ ...current, contact: event.target.value }))}
                       />
@@ -385,6 +388,7 @@ export default function VaultPage() {
                       <input
                         type="email"
                         className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        placeholder="e.g. ahmad@email.com"
                         value={trustedForm.releaseEmail}
                         onChange={(event) => setTrustedForm((current) => ({ ...current, releaseEmail: event.target.value }))}
                       />
@@ -392,6 +396,7 @@ export default function VaultPage() {
                     <FloatingField label="Phone Number (Optional)" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
                       <input
                         className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        placeholder="e.g. +6012-345-6789"
                         value={trustedForm.phoneNumber}
                         onChange={(event) => setTrustedForm((current) => ({ ...current, phoneNumber: event.target.value }))}
                       />
