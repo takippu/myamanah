@@ -4,13 +4,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateRecoveryKey } from "@/lib/vault-crypto";
 import { clearVaultSecrets, getVaultSecrets, setVaultSecrets } from "@/lib/vault-session";
+import { authClient } from "@/lib/auth-client";
+import type { VaultData } from "@/lib/vault-data";
 import {
   hasLocalVaultPayload,
   initializeVaultIfMissing,
   verifyLocalVaultCredentials,
+  restoreVaultFromCloud,
   clearLocalEncryptedPayload,
   getLocalProfileName,
   setLocalProfileName,
+  setCloudBackupEnabled,
 } from "@/lib/vault-client";
 
 export default function AccessSetupPage() {
@@ -30,6 +34,7 @@ export default function AccessSetupPage() {
   const [fullName, setFullName] = useState("");
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied">("idle");
 
+  // Check session on mount - force sign out if no local vault exists
   useEffect(() => {
     let cancelled = false;
 
@@ -43,6 +48,17 @@ export default function AccessSetupPage() {
       const existingSecrets = getVaultSecrets();
 
       if (!localVaultExists) {
+        // No local vault - this is a fresh start
+        // Clear any stale state from previous vaults
+        setCloudBackupEnabled(false);
+        
+        // Force sign out from any previous Google session
+        try {
+          await authClient.signOut();
+        } catch {
+          // Ignore errors - already signed out or no session
+        }
+        
         if (!cancelled) {
           setMode("create");
         }
@@ -109,13 +125,17 @@ export default function AccessSetupPage() {
     setError(null);
     
     try {
+      // Ensure cloud backup is disabled for new vaults
+      // (User must explicitly enable it in settings)
+      setCloudBackupEnabled(false);
+      
       setVaultSecrets({
         passphrase,
         recoveryKey,
       });
       setLocalProfileName(fullName || null);
       
-      // Initialize the vault
+      // Initialize the vault (local only, no cloud sync yet)
       await initializeVaultIfMissing();
       
       setStep("complete");
@@ -138,22 +158,64 @@ export default function AccessSetupPage() {
 
     setIsLoading(true);
     setError(null);
+    
     try {
-      await verifyLocalVaultCredentials(unlockPassphrase, unlockRecoveryKey);
+      // First try local vault
+      let vaultData: VaultData;
+      const hasLocal = hasLocalVaultPayload();
+      
+      if (hasLocal) {
+        // Local vault exists - verify directly
+        vaultData = await verifyLocalVaultCredentials(unlockPassphrase, unlockRecoveryKey);
+      } else {
+        // No local vault - try to restore from cloud
+        try {
+          vaultData = await restoreVaultFromCloud(unlockPassphrase, unlockRecoveryKey);
+        } catch (cloudError) {
+          const msg = cloudError instanceof Error ? cloudError.message : "Failed to restore";
+          if (msg.includes("signed in")) {
+            setError("No local vault found. Sign in with Google first to restore from cloud backup.");
+          } else if (msg.includes("No cloud backup")) {
+            setError("No vault found on this device and no cloud backup available. Create a new vault instead.");
+          } else {
+            setError(msg);
+          }
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // Store secrets and redirect
       setVaultSecrets({
         passphrase: unlockPassphrase,
         recoveryKey: unlockRecoveryKey,
       });
+      
+      // Restore profile name if available
+      if (vaultData.meta?.profileName) {
+        setLocalProfileName(vaultData.meta.profileName);
+      }
+      
       router.push("/dashboard");
     } catch {
-      setError("Those access keys did not unlock the local vault.");
+      setError("Incorrect passphrase or recovery key. Please check and try again.");
       setIsLoading(false);
     }
   };
 
-  const handleCreateNewVault = () => {
+  const handleCreateNewVault = async () => {
+    // Clear local vault data
     clearLocalEncryptedPayload();
     clearVaultSecrets();
+    setCloudBackupEnabled(false);
+    
+    // Sign out from any previous Google session to avoid confusion
+    try {
+      await authClient.signOut();
+    } catch {
+      // Ignore sign out errors
+    }
+    
     setMode("create");
     setStep("passphrase");
     setError(null);
@@ -168,17 +230,17 @@ export default function AccessSetupPage() {
   const existingAccountPrompt = (
     <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-        Existing Account
+        Restore from Cloud Backup
       </p>
       <p className="mt-1 text-sm text-slate-500">
-        Already enabled encrypted Google backup before? Sign in to continue with that account.
+        Already have a vault with cloud backup? Sign in to restore your encrypted vault to this device.
       </p>
       <button
         type="button"
         onClick={() => router.push("/login")}
         className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-colors hover:border-slate-500 hover:text-slate-950"
       >
-        Sign in to Existing Account
+        Sign In to Restore Backup
       </button>
     </div>
   );
@@ -229,39 +291,58 @@ export default function AccessSetupPage() {
 
           {mode === "unlock" && (
             <div className="space-y-6">
-              <div>
+              {/* Locked vault indicator */}
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-amber-100 text-amber-600">
+                  <span className="material-symbols-outlined text-[40px]">lock</span>
+                </div>
                 <h1 className="text-3xl font-light tracking-tight text-slate-900">
-                  Unlock your <span className="font-semibold">vault</span>
+                  Vault is <span className="font-semibold">locked</span>
                 </h1>
-                <p className="mt-2 text-sm text-slate-500">
-                  This device already has an encrypted local vault. Enter your passphrase and recovery key to continue.
+                <p className="mt-2 max-w-sm text-sm text-slate-500">
+                  Your vault is encrypted and requires your passphrase and recovery key to unlock.
+                  This is a security measure — even we can&apos;t access your data.
                 </p>
+              </div>
+
+              {/* Info box */}
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-amber-600">info</span>
+                  <div className="text-xs text-amber-800">
+                    <p className="font-semibold">Why am I seeing this?</p>
+                    <p className="mt-1">
+                      Your vault locks automatically when you close the browser or after a period of inactivity. 
+                      Sign-in (Google) only proves your identity — your vault decryption keys are never stored on our servers.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
-                    Passphrase
+                    Passphrase <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type={showPassphrase ? "text" : "password"}
                     value={unlockPassphrase}
                     onChange={(e) => setUnlockPassphrase(e.target.value)}
-                    placeholder="Your passphrase"
+                    placeholder="Enter your passphrase"
                     className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
-                    Recovery Key
+                    Recovery Key <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showRecovery ? "text" : "password"}
                       value={unlockRecoveryKey}
                       onChange={(e) => setUnlockRecoveryKey(e.target.value)}
-                      placeholder="Your saved recovery key"
+                      placeholder="Enter your recovery key"
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
                     />
                     <button
@@ -274,28 +355,44 @@ export default function AccessSetupPage() {
                       </span>
                     </button>
                   </div>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Your recovery key was shown when you first created your vault.
+                  </p>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={handleUnlock}
-                disabled={isLoading}
+                disabled={isLoading || !unlockPassphrase || !unlockRecoveryKey}
                 className="flex w-full items-center justify-center gap-3 rounded-[2rem] bg-emerald-800 py-5 text-sm font-semibold tracking-wide text-white shadow-xl shadow-emerald-900/20 transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? "Unlocking..." : "Unlock Vault"}
+                <span className="material-symbols-outlined">lock_open</span>
+                {isLoading ? "Unlocking..." : "Unlock My Vault"}
               </button>
 
-              <p className="text-center text-xs text-slate-400">
-                New device or no local vault here? Create a new offline vault on a different browser profile or device.
-              </p>
-              <button
-                type="button"
-                onClick={handleCreateNewVault}
-                className="mt-3 w-full rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition-colors hover:border-slate-500 hover:text-slate-900"
-              >
-                Start a new vault on this device
-              </button>
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-center text-xs font-medium text-slate-500">
+                  Don&apos;t have your keys?
+                </p>
+                <p className="mt-1 text-center text-[10px] text-slate-400">
+                  If you&apos;ve lost both your passphrase and recovery key, your vault data cannot be recovered. 
+                  This is the nature of zero-knowledge encryption.
+                </p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-center text-xs text-slate-400">
+                  Want to start fresh on this device?
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCreateNewVault}
+                  className="mt-2 w-full rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition-colors hover:border-slate-500 hover:text-slate-900"
+                >
+                  Create New Vault
+                </button>
+              </div>
 
               {existingAccountPrompt}
             </div>
@@ -304,6 +401,27 @@ export default function AccessSetupPage() {
           {/* Step 1: Passphrase */}
           {mode === "create" && step === "passphrase" && (
             <div className="space-y-6">
+              {/* Sign out option if there's a stale session */}
+              <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-slate-400">info</span>
+                  <p className="text-xs text-slate-600">
+                    Creating a new vault
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await authClient.signOut();
+                    setCloudBackupEnabled(false);
+                    window.location.reload();
+                  }}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                >
+                  Start completely fresh
+                </button>
+              </div>
+
               <div>
                 <h1 className="text-3xl font-light tracking-tight text-slate-900">
                   Create your <span className="font-semibold">passphrase</span>

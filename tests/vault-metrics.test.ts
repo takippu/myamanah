@@ -9,7 +9,12 @@ import type { VaultData } from "@/lib/vault-data";
 
 describe("Vault metrics reporting", () => {
   it("sends only derived non-confidential readiness and checklist payloads", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    // First call is auth check (returns ok), then two metrics calls
+    let callCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      callCount++;
+      return Promise.resolve({ ok: true });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const vaultData: VaultData = {
@@ -55,9 +60,10 @@ describe("Vault metrics reporting", () => {
 
     await reportVaultMetrics(vaultData);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const checklistBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    const readinessBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    // 3 calls: auth check, checklist-progress, readiness
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const checklistBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    const readinessBody = JSON.parse(String(fetchMock.mock.calls[2][1]?.body));
 
     expect(checklistBody).toEqual({
       assetsMapped: true,

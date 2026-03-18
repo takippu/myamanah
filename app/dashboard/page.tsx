@@ -228,6 +228,7 @@ export default function DashboardPage() {
           {isLoading ? (
             <HeroSkeleton />
           ) : (
+            <div className="space-y-3">
             <div className="dashboard-islamic-pattern group relative overflow-hidden rounded-[2.2rem] border border-white/10 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.45)] transition-all duration-500 hover:-translate-y-1">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/18 via-transparent to-white/5" />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_38%)]" />
@@ -290,6 +291,11 @@ export default function DashboardPage() {
                   ) : null}
                 </div>
               </div>
+            </div>
+            <p className="px-2 text-[11px] leading-relaxed text-slate-500">
+              If this deadman flow ever releases your backup, trusted contacts will only receive the encrypted package.
+              They still need your recovery key from you separately, and any release email/phone delivery details are stored outside the encrypted vault for emergency use.
+            </p>
             </div>
           )}
 

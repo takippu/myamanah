@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
+
 export default function LoginPage() {
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -26,9 +27,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background-light px-4 py-8 text-slate-900">
       <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-bold">Enable Cloud Sync</h1>
+        <h1 className="text-2xl font-bold">Sign In to Restore Backup</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Your vault works offline without an account. Use your Google account only if you want encrypted cloud backup.
+          Sign in with the Google account you used to enable cloud backup. After signing in, you can restore your encrypted vault.
         </p>
 
         <button
@@ -45,7 +46,7 @@ export default function LoginPage() {
           type="button"
           onClick={() => router.push("/access")}
         >
-          Back to Local Vault
+          Create New Vault Instead
         </button>
 
         {message ? <p className="mt-3 text-sm text-slate-600">{message}</p> : null}

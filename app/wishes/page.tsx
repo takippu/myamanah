@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppBottomNav } from "../components/app-bottom-nav";
 import { HeroSkeleton, FormSkeleton } from "../components/skeletons";
+import { UnlockVaultDrawer } from "../components/unlock-vault-drawer";
 import { VaultSessionGuard } from "../components/vault-session-guard";
 import { emptyVaultData } from "@/lib/vault-data";
 import { loadVaultData, saveVaultData } from "@/lib/vault-client";
@@ -11,6 +12,8 @@ import { loadVaultData, saveVaultData } from "@/lib/vault-client";
 export default function WishesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusTone, setStatusTone] = useState<"success" | "error">("success");
+  const [showUnlockDrawer, setShowUnlockDrawer] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
   const [form, setForm] = useState({
@@ -31,8 +34,15 @@ export default function WishesPage() {
           executorNotes: vault.wishes.executorNotes ?? "",
         });
       }
-    } catch {
-      setStatusMessage("Could not load wishes.");
+      setShowUnlockDrawer(false);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "";
+      if (errorMsg.includes("not configured") || errorMsg.includes("Vault access")) {
+        setStatusMessage("Vault is locked. Please unlock to view your wishes.");
+        setShowUnlockDrawer(true);
+      } else {
+        setStatusMessage("Could not load wishes.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -75,9 +85,11 @@ export default function WishesPage() {
           executorNotes: form.executorNotes.trim(),
         },
       });
+      setStatusTone("success");
       setStatusMessage("Wishes saved successfully.");
       setTimeout(() => setStatusMessage(null), 3000);
     } catch {
+      setStatusTone("error");
       setStatusMessage("Saved locally. Cloud backup could not be updated right now.");
     } finally {
       setIsSaving(false);
@@ -125,12 +137,6 @@ export default function WishesPage() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md">
                     <span className="material-symbols-outlined text-[20px] text-emerald-200">auto_stories</span>
                   </div>
-                  <div className="flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/20 px-3 py-1.5 backdrop-blur-md">
-                    <div className={`h-2 w-2 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)] ${isComplete ? "bg-emerald-400" : "bg-amber-400"}`} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-white">
-                      {isComplete ? "Complete" : "In Progress"}
-                    </span>
-                  </div>
                 </div>
                 <div>
                   <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-200/60">Completion</p>
@@ -150,8 +156,10 @@ export default function WishesPage() {
 
         <main className="flex-1 space-y-4 px-6 pb-36 pt-4">
           {statusMessage ? (
-            <div className={`glass-card rounded-2xl border px-4 py-3 ${statusMessage.includes("success") ? "border-emerald-100 bg-emerald-50/80" : "border-rose-100 bg-rose-50/80"}`}>
-              <p className={`text-xs font-medium ${statusMessage.includes("success") ? "text-emerald-700" : "text-rose-700"}`}>{statusMessage}</p>
+            <div className={`glass-card rounded-2xl border px-4 py-3 ${
+              statusTone === "success" ? "border-emerald-100 bg-emerald-50/80" : "border-rose-100 bg-rose-50/80"
+            }`}>
+              <p className={`text-xs font-medium ${statusTone === "success" ? "text-emerald-700" : "text-rose-700"}`}>{statusMessage}</p>
             </div>
           ) : null}
 
@@ -262,6 +270,16 @@ export default function WishesPage() {
             </section>
           )}
         </main>
+
+        <UnlockVaultDrawer
+          open={showUnlockDrawer}
+          onClose={() => setShowUnlockDrawer(false)}
+          onUnlock={() => {
+            setStatusMessage("Vault unlocked successfully!");
+            setStatusTone("success");
+            void refreshData();
+          }}
+        />
 
         {isLoading ? (
           <div className="glass fixed bottom-0 left-0 right-0 border-t border-white/50 bg-white/80 pb-6 pt-3">

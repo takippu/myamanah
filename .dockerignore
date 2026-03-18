@@ -1,0 +1,51 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Next.js build output
+.next
+out
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Database files (will be mounted as volumes)
+*.db
+*.db-journal
+prisma/*.db
+
+# Backup files
+backups/
+data/
+
+# Testing
+coverage
+.nyc_output
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Deployment files (not needed in image)
+deploy/
+scripts/
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+logs
+*.log

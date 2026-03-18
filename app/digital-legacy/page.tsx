@@ -9,6 +9,7 @@ import { CustomSelect } from "../components/custom-select";
 import { FloatingField } from "../components/floating-field";
 import { HeroSkeleton,  ListItemSkeleton } from "../components/skeletons";
 import { RecordListDrawer } from "../components/record-list-drawer";
+import { UnlockVaultDrawer } from "../components/unlock-vault-drawer";
 import { VaultSessionGuard } from "../components/vault-session-guard";
 import { emptyVaultData, type DigitalLegacyRecord, type VaultContact } from "@/lib/vault-data";
 import { loadVaultData, saveVaultData } from "@/lib/vault-client";
@@ -36,12 +37,15 @@ export default function DigitalLegacyPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<"success" | "error">("success");
+  const [showUnlockDrawer, setShowUnlockDrawer] = useState(false);
   const [showFormDrawer, setShowFormDrawer] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
   const [showContacts, setShowContacts] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
+  const [showCredentialsInfo, setShowCredentialsInfo] = useState(false);
   const [form, setForm] = useState({
     category: CATEGORY_OPTIONS[0],
     platform: "",
@@ -56,8 +60,15 @@ export default function DigitalLegacyPage() {
     try {
       const vault = await loadVaultData();
       setItems(vault?.digitalLegacy ?? []);
-    } catch {
-      setStatusMessage("Could not load digital legacy.");
+      setShowUnlockDrawer(false);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "";
+      if (errorMsg.includes("not configured") || errorMsg.includes("Vault access")) {
+        setStatusMessage("Vault is locked. Please unlock to view your digital legacy.");
+        setShowUnlockDrawer(true);
+      } else {
+        setStatusMessage("Could not load digital legacy.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -83,6 +94,7 @@ export default function DigitalLegacyPage() {
 
   const resetForm = () => {
     setEditingId(null);
+    setFormErrors([]);
     setShowContacts(false);
     setShowCredentials(false);
     setForm({
@@ -97,11 +109,16 @@ export default function DigitalLegacyPage() {
   };
 
   const onSave = async () => {
-    if (!form.platform.trim() || !form.whereToFind.trim()) {
-      setStatusTone("error");
-      setStatusMessage("Platform and where to find access details are required.");
+    const errors: string[] = [];
+    if (!form.platform.trim()) errors.push("Platform is required");
+    if (!form.whereToFind.trim()) errors.push("Where to find access details is required");
+    
+    if (errors.length > 0) {
+      setFormErrors(errors);
       return;
     }
+    
+    setFormErrors([]);
 
     setIsSaving(true);
     const wasEditing = Boolean(editingId);
@@ -249,10 +266,6 @@ export default function DigitalLegacyPage() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md">
                     <span className="material-symbols-outlined text-[20px] text-sky-200">fingerprint</span>
                   </div>
-                  <div className="flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/20 px-3 py-1.5 backdrop-blur-md">
-                    <div className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-white">Active</span>
-                  </div>
                 </div>
                 <div>
                   <p className="mb-1 text-xs font-medium uppercase tracking-widest text-slate-300/60">Total Entries</p>
@@ -320,60 +333,34 @@ export default function DigitalLegacyPage() {
                   router.push(`/digital-legacy/${item.id}`);
                 }
               }}
-              className="glass-card rounded-3xl border border-[#e7eaee] bg-white/85 p-5 transition-all duration-300 hover:-translate-y-[2px]"
+              className="rounded-[2rem] bg-slate-50 p-5 transition-all duration-200 hover:bg-slate-100 active:scale-[0.98]"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
-                    <span className="material-symbols-outlined">public</span>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{item.category}</p>
-                    <h3 className="text-lg font-bold text-slate-900">{item.platform}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{item.whereToFind}</p>
-                  </div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">{item.category}</p>
+                  <h3 className="truncate text-lg font-bold text-slate-900">{item.platform}</h3>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Access Record</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {item.accountIdentifier || item.accountPassword ? "Has credentials" : "Reference only"}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-5 flex items-center justify-end gap-2">
                 <button
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-700 transition-colors hover:bg-slate-50"
                   type="button"
-                  aria-label={`View ${item.platform}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    router.push(`/digital-legacy/${item.id}`);
-                  }}
-                >
-                  <span className="material-symbols-outlined text-[18px]">visibility</span>
-                </button>
-                <button
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 transition-colors hover:bg-sky-200"
-                  type="button"
-                  aria-label={`Edit ${item.platform}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onEdit(item);
                   }}
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 transition-colors hover:bg-sky-200"
+                  aria-label={`Edit ${item.platform}`}
                 >
-                  <span className="material-symbols-outlined text-[18px]">edit</span>
+                  <span className="material-symbols-outlined text-[20px]">edit</span>
                 </button>
-                <button
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-100 text-rose-700 transition-colors hover:bg-rose-200"
-                  type="button"
-                  aria-label={`Delete ${item.platform}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setPendingDeleteId(item.id);
-                  }}
-                >
-                  <span className="material-symbols-outlined text-[18px]">delete</span>
-                </button>
+              </div>
+              
+              <div className="mt-4 flex items-end justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Access</p>
+                  <p className="text-sm font-bold text-sky-600">
+                    {item.accountIdentifier || item.accountPassword ? "Has credentials" : "Reference only"}
+                  </p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
               </div>
             </article>
           ))}
@@ -398,6 +385,17 @@ export default function DigitalLegacyPage() {
           }
         >
           <div className="space-y-4 pt-2">
+            {formErrors.length > 0 ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-3">
+                <p className="text-xs font-semibold text-rose-700">Please fill in all required fields:</p>
+                <ul className="mt-1 list-disc pl-4 text-xs text-rose-600">
+                  {formErrors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             <div className="px-1">
               <p className="text-xs leading-5 text-slate-500">
                 Record the account, where access details live, and add login or contact help only if you need it.
@@ -414,17 +412,21 @@ export default function DigitalLegacyPage() {
                     accentClassName="text-sky-700"
                   />
                 </FloatingField>
-                <FloatingField label="Platform" labelClassName="text-sky-700">
+                <FloatingField label="Platform *" labelClassName="text-sky-700">
                   <input
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
+                    className={`w-full rounded-2xl border bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500 ${
+                      formErrors.some(e => e.includes("Platform")) && !form.platform.trim() ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                    }`}
                     placeholder="Platform or service (e.g. Instagram, Gmail)"
                     value={form.platform}
                     onChange={(e) => setForm((p) => ({ ...p, platform: e.target.value }))}
                   />
                 </FloatingField>
-                <FloatingField label="Access Where" labelClassName="text-sky-700">
+                <FloatingField label="Access Where *" labelClassName="text-sky-700">
                   <input
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
+                    className={`w-full rounded-2xl border bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500 ${
+                      formErrors.some(e => e.includes("Where to find")) && !form.whereToFind.trim() ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                    }`}
                     placeholder="Where are login, recovery, or access details kept?"
                     value={form.whereToFind}
                     onChange={(e) => setForm((p) => ({ ...p, whereToFind: e.target.value }))}
@@ -439,14 +441,24 @@ export default function DigitalLegacyPage() {
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Login Help</p>
                   <p className="mt-1 text-xs text-slate-500">Optional</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowCredentials((current) => !current)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-700"
-                  aria-label={showCredentials ? "Hide optional login details" : "Show optional login details"}
-                >
-                  {showCredentials ? "Hide" : "Add"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCredentialsInfo(true)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition-colors hover:border-sky-200 hover:text-sky-600"
+                    aria-label="About login credentials"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">info</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCredentials((current) => !current)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-700"
+                    aria-label={showCredentials ? "Hide optional login details" : "Show optional login details"}
+                  >
+                    {showCredentials ? "Hide" : "Add"}
+                  </button>
+                </div>
               </div>
               {showCredentials ? (
                 <div className="space-y-3">
@@ -538,6 +550,44 @@ export default function DigitalLegacyPage() {
             </FloatingField>
           </div>
         </RecordListDrawer>
+
+        <UnlockVaultDrawer
+          open={showUnlockDrawer}
+          onClose={() => setShowUnlockDrawer(false)}
+          onUnlock={() => {
+            setStatusMessage("Vault unlocked successfully!");
+            setStatusTone("success");
+            void refreshData();
+          }}
+        />
+
+        {/* Credentials Info Dialog */}
+        {showCredentialsInfo && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => setShowCredentialsInfo(false)}>
+            <div className="max-w-sm rounded-[2rem] bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+                <span className="material-symbols-outlined">info</span>
+              </div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-900">About Login Credentials</h3>
+              <p className="mb-4 text-sm leading-relaxed text-slate-600">
+                For maximum security, we recommend <strong>not</strong> storing account credentials directly in these fields.
+              </p>
+              <p className="mb-4 text-sm leading-relaxed text-slate-600">
+                Instead, use the <strong>&quot;Where to Find&quot; field</strong> above to tell your trusted contact where you&apos;ve stored your credentials — such as a physical safe, password manager, or secure note.
+              </p>
+              <p className="mb-6 text-xs leading-relaxed text-slate-500">
+                This approach adds an extra layer of security while still ensuring your loved ones can access what matters.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowCredentialsInfo(false)}
+                className="w-full rounded-2xl bg-slate-900 py-3.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        )}
 
         <ConfirmActionModal
           open={pendingDeleteId !== null}

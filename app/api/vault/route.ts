@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  storeVaultBackup,
+  getVaultBackup,
+  deleteVaultBackup,
+} from "@/lib/sqlite-backup";
+import { recordReleaseAuditEvent } from "@/lib/release-audit";
 import { encryptedVaultPayloadSchema } from "@/lib/vault-schema";
 import { getAuthUserFromRequest } from "@/lib/auth";
 
@@ -8,6 +14,10 @@ async function hasBackupConsent(userId: string) {
   return Boolean(consent?.backupEnabled);
 }
 
+/**
+ * GET /api/vault
+ * Download encrypted vault backup from SQLite
+ */
 export async function GET() {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -15,26 +25,22 @@ export async function GET() {
     return NextResponse.json({ error: "Backup consent required" }, { status: 403 });
   }
 
-  const vault = await prisma.vault.findUnique({ where: { userId: user.id } });
-  if (!vault) {
+  const backup = await getVaultBackup(user.id);
+  if (!backup) {
     return NextResponse.json({ error: "Vault not found" }, { status: 404 });
   }
 
   return NextResponse.json({
-    ciphertext: vault.ciphertext,
-    iv: vault.iv,
-    authTag: vault.authTag,
-    wrappedDekPass: vault.wrappedDekPass,
-    wrappedDekRecovery: vault.wrappedDekRecovery,
-    saltPass: vault.saltPass,
-    saltRecovery: vault.saltRecovery,
-    kdfParams: vault.kdfParams,
-    schemaVersion: vault.schemaVersion,
-    recoveryVerifiedAt: vault.recoveryVerifiedAt,
-    updatedAt: vault.updatedAt,
+    ...backup.payload,
+    recoveryVerifiedAt: backup.metadata.recoveryVerifiedAt,
+    updatedAt: backup.metadata.lastBackedUpAt,
   });
 }
 
+/**
+ * PUT /api/vault
+ * Store encrypted vault backup in SQLite
+ */
 export async function PUT(req: Request) {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -48,28 +54,32 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Invalid encrypted payload" }, { status: 400 });
   }
 
-  const updated = await prisma.vault.upsert({
-    where: { userId: user.id },
-    update: {
-      ...parsed.data,
-    },
-    create: {
-      userId: user.id,
-      ...parsed.data,
-    },
-  });
+  const metadata = await storeVaultBackup(user.id, parsed.data);
+  await recordReleaseAuditEvent({ userId: user.id, type: "backup_uploaded" });
 
   return NextResponse.json({
-    userId: updated.userId,
-    schemaVersion: updated.schemaVersion,
-    updatedAt: updated.updatedAt,
+    userId: metadata.userId,
+    schemaVersion: parsed.data.schemaVersion,
+    updatedAt: metadata.lastBackedUpAt,
   });
 }
 
+/**
+ * DELETE /api/vault
+ * Delete encrypted vault backup from SQLite
+ */
 export async function DELETE() {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  await prisma.vault.deleteMany({ where: { userId: user.id } });
+  const hasBackup = await prisma.vaultBackup.findUnique({
+    where: { userId: user.id },
+  });
+  
+  if (hasBackup) {
+    await deleteVaultBackup(user.id);
+    await recordReleaseAuditEvent({ userId: user.id, type: "backup_deleted" });
+  }
+  
   return NextResponse.json({ ok: true });
 }

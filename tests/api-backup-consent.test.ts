@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetAuthUserFromRequest = vi.fn();
 const mockConsentFindUnique = vi.fn();
 const mockConsentUpsert = vi.fn();
-const mockVaultFindUnique = vi.fn();
-const mockVaultUpsert = vi.fn();
-const mockVaultDeleteMany = vi.fn();
+const mockVaultBackupFindUnique = vi.fn();
+const mockVaultBackupDeleteMany = vi.fn();
+const mockRecordReleaseAuditEvent = vi.fn();
+const mockStoreVaultBackup = vi.fn();
+const mockDeleteVaultBackup = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getAuthUserFromRequest: mockGetAuthUserFromRequest,
@@ -17,12 +19,20 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: mockConsentFindUnique,
       upsert: mockConsentUpsert,
     },
-    vault: {
-      findUnique: mockVaultFindUnique,
-      upsert: mockVaultUpsert,
-      deleteMany: mockVaultDeleteMany,
+    vaultBackup: {
+      findUnique: mockVaultBackupFindUnique,
+      deleteMany: mockVaultBackupDeleteMany,
     },
   },
+}));
+
+vi.mock("@/lib/sqlite-backup", () => ({
+  storeVaultBackup: mockStoreVaultBackup,
+  deleteVaultBackup: mockDeleteVaultBackup,
+}));
+
+vi.mock("@/lib/release-audit", () => ({
+  recordReleaseAuditEvent: mockRecordReleaseAuditEvent,
 }));
 
 const validEncryptedPayload = {
@@ -47,6 +57,8 @@ describe("Backup consent gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAuthUserFromRequest.mockResolvedValue({ id: "user_123" });
+    mockVaultBackupFindUnique.mockResolvedValue(null);
+    mockRecordReleaseAuditEvent.mockResolvedValue(undefined);
   });
 
   it("blocks vault reads when backup consent is disabled", async () => {
@@ -58,15 +70,14 @@ describe("Backup consent gating", () => {
 
     expect(res.status).toBe(403);
     expect(body.error).toBe("Backup consent required");
-    expect(mockVaultFindUnique).not.toHaveBeenCalled();
+    expect(mockVaultBackupFindUnique).not.toHaveBeenCalled();
   });
 
   it("allows encrypted backup writes only when consent is enabled", async () => {
     mockConsentFindUnique.mockResolvedValue({ backupEnabled: true });
-    mockVaultUpsert.mockResolvedValue({
+    mockStoreVaultBackup.mockResolvedValue({
       userId: "user_123",
-      schemaVersion: 1,
-      updatedAt: new Date("2026-02-24T00:00:00.000Z"),
+      lastBackedUpAt: new Date("2026-02-24T00:00:00.000Z"),
     });
     const { PUT } = await import("@/app/api/vault/route");
 
@@ -78,18 +89,18 @@ describe("Backup consent gating", () => {
 
     const res = await PUT(req);
     expect(res.status).toBe(200);
-    expect(mockVaultUpsert).toHaveBeenCalledTimes(1);
-    expect(mockVaultUpsert).toHaveBeenCalledWith({
-      where: { userId: "user_123" },
-      update: validEncryptedPayload,
-      create: { userId: "user_123", ...validEncryptedPayload },
-    });
+    expect(mockStoreVaultBackup).toHaveBeenCalledTimes(1);
+    expect(mockStoreVaultBackup).toHaveBeenCalledWith("user_123", validEncryptedPayload);
   });
 
   it("revoking backup consent deletes cloud backup data", async () => {
     mockConsentUpsert.mockResolvedValue({
       backupEnabled: false,
       revokedAt: new Date("2026-02-24T00:00:00.000Z"),
+    });
+    mockVaultBackupFindUnique.mockResolvedValue({
+      userId: "user_123",
+      ciphertext: "encrypted_data",
     });
     const { DELETE } = await import("@/app/api/privacy/consent/backup/route");
 
@@ -98,6 +109,6 @@ describe("Backup consent gating", () => {
 
     expect(res.status).toBe(200);
     expect(body.backupEnabled).toBe(false);
-    expect(mockVaultDeleteMany).toHaveBeenCalledWith({ where: { userId: "user_123" } });
+    expect(mockDeleteVaultBackup).toHaveBeenCalledWith("user_123");
   });
 });

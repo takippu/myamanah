@@ -25,6 +25,30 @@ model Vault {
   updatedAt          DateTime @updatedAt
 }
 
+enum DeadmanReleaseStatus {
+  armed
+  grace_period
+  released
+  cancelled
+}
+
+enum ReleaseAuditEventType {
+  backup_uploaded
+  backup_deleted
+  grace_started
+  owner_warning_sent
+  grace_cancelled
+  release_executed
+  release_email_sent
+  release_email_ignored
+  release_failed
+  retrieval_token_created
+  retrieval_viewed
+  retrieval_downloaded
+  retrieval_accepted
+  retrieval_expired
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -39,6 +63,11 @@ model User {
   readinessSnapshots UserReadinessSnapshot[]
   checklistProgress  UserChecklistProgress?
   privacyConsent     UserPrivacyConsent?
+  vaultBackup        VaultBackup?
+  deadmanReleaseState DeadmanReleaseState?
+  trustedContactReleaseChannels TrustedContactReleaseChannel[]
+  releaseAuditEvents ReleaseAuditEvent[]
+  releaseRetrievalTokens ReleaseRetrievalToken[]
 }
 
 model Session {
@@ -117,4 +146,110 @@ model UserPrivacyConsent {
   consentedAt  DateTime?
   revokedAt    DateTime?
   updatedAt    DateTime  @updatedAt
+}
+
+// SQLite-based encrypted vault backup (replaces Google Drive)
+model VaultBackup {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Encrypted vault payload stored directly in SQLite
+  ciphertext          String   // Base64-encoded encrypted vault data
+  iv                  String   // Initialization vector
+  authTag             String   // Authentication tag
+  // Key wrapping (same as local vault)
+  wrappedDekPass      String   // Data encryption key wrapped with passphrase
+  wrappedDekRecovery  String   // Data encryption key wrapped with recovery key
+  saltPass            String   // Salt for passphrase KDF
+  saltRecovery        String   // Salt for recovery key KDF
+  kdfParams           Json     // Argon2id params
+  schemaVersion       Int      @default(1)
+  // Metadata
+  lastBackedUpAt      DateTime @default(now())
+  backupFingerprint   String   // Hash of ciphertext for integrity checks
+  recoveryVerifiedAt  DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model DeadmanReleaseState {
+  id                String               @id @default(cuid())
+  userId            String               @unique
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            DeadmanReleaseStatus @default(armed)
+  lastCheckInAt     DateTime?
+  missedAt          DateTime?
+  graceEndsAt       DateTime?
+  releasedAt        DateTime?
+  cancelledAt       DateTime?
+  ownerWarningSentAt DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+model TrustedContactReleaseChannel {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trustedContactId String
+  releaseEmail    String
+  phoneNumber     String?
+  emailIgnored    Boolean  @default(false)
+  firstViewedAt   DateTime?
+  downloadedAt    DateTime?
+  acceptedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, trustedContactId])
+  @@index([userId])
+}
+
+model ReleaseRetrievalToken {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trustedContactId String
+  tokenHash       String   @unique
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, trustedContactId])
+}
+
+model ReleaseAuditEvent {
+  id              String               @id @default(cuid())
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trustedContactId String?
+  type            ReleaseAuditEventType
+  occurredAt      DateTime             @default(now())
+  metadataJson    Json?
+
+  @@index([userId, occurredAt])
+  @@index([userId, trustedContactId, occurredAt])
+}
+
+// Email retry queue for failed release notifications
+model EmailRetryQueue {
+  id                String   @id @default(cuid())
+  userId            String
+  trustedContactId  String?
+  emailType         String   // "owner_warning" | "contact_release"
+  recipientEmail    String
+  subject           String
+  bodyText          String
+  bodyHtml          String
+  attemptCount      Int      @default(0)
+  lastAttemptAt     DateTime?
+  nextAttemptAt     DateTime
+  status            String   @default("pending") // pending | processing | failed | sent
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([userId])
 }

@@ -33,7 +33,22 @@ function buildReadiness(checklist: ChecklistProgressPayload) {
   return { readinessPercent, completedCount, totalCount };
 }
 
+async function isAuthenticated(): Promise<boolean> {
+  try {
+    const response = await fetch("/api/auth/me", { 
+      credentials: "include",
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function reportVaultMetrics(vaultData: VaultData) {
+  // Only report metrics if user is authenticated
+  if (!(await isAuthenticated())) return;
+  
   const checklist = buildChecklistProgress(vaultData);
   const readiness = buildReadiness(checklist);
 

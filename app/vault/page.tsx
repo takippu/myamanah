@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import type { TrustedContactReleaseChannel } from "@prisma/client";
 import { AppBottomNav } from "../components/app-bottom-nav";
 import { FloatingField } from "../components/floating-field";
 import { CategoryCardSkeleton } from "../components/skeletons";
 import { VaultSessionGuard } from "../components/vault-session-guard";
 import { emptyVaultData, type VaultData } from "@/lib/vault-data";
-import { loadVaultData, saveVaultData } from "@/lib/vault-client";
+import {
+  deleteTrustedContactReleaseChannel,
+  getTrustedContactReleaseChannels,
+  loadVaultData,
+  saveTrustedContactReleaseChannel,
+  saveVaultData,
+} from "@/lib/vault-client";
 
 function formatLastUpdated(dateStr: string | null): string {
   if (!dateStr) return "Never updated";
@@ -45,16 +52,30 @@ export default function VaultPage() {
   const [showTrustedForm, setShowTrustedForm] = useState(false);
   const [trustedStatus, setTrustedStatus] = useState<string | null>(null);
   const [showVaultHelp, setShowVaultHelp] = useState(false);
+  const [canManageReleaseChannels, setCanManageReleaseChannels] = useState(false);
+  const [releaseChannels, setReleaseChannels] = useState<Record<string, TrustedContactReleaseChannel>>({});
   const [trustedForm, setTrustedForm] = useState({
     name: "",
     relation: "",
     contact: "",
+    releaseEmail: "",
+    phoneNumber: "",
   });
 
   const refreshData = async () => {
     try {
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
+      setCanManageReleaseChannels(authRes.ok);
       const vault = await loadVaultData();
       setVault(vault ?? emptyVaultData());
+      if (authRes.ok) {
+        const channels = await getTrustedContactReleaseChannels();
+        setReleaseChannels(
+          Object.fromEntries(channels.map((channel) => [channel.trustedContactId, channel])),
+        );
+      } else {
+        setReleaseChannels({});
+      }
       const debts = vault?.debts?.length ?? 0;
       const assets = vault?.assets?.length ?? 0;
       const digitalLegacy = vault?.digitalLegacy?.length ?? 0;
@@ -103,20 +124,23 @@ export default function VaultPage() {
   const resetTrustedForm = () => {
     setEditingTrustedId(null);
     setShowTrustedForm(false);
-    setTrustedForm({ name: "", relation: "", contact: "" });
+    setTrustedForm({ name: "", relation: "", contact: "", releaseEmail: "", phoneNumber: "" });
   };
 
   const openTrustedForm = (contact?: { id: string; name: string; relation?: string; contact?: string }) => {
+    const releaseChannel = contact ? releaseChannels[contact.id] : undefined;
     if (contact) {
       setEditingTrustedId(contact.id);
       setTrustedForm({
         name: contact.name,
         relation: contact.relation ?? "",
         contact: contact.contact ?? "",
+        releaseEmail: releaseChannel?.releaseEmail ?? "",
+        phoneNumber: releaseChannel?.phoneNumber ?? "",
       });
     } else {
       setEditingTrustedId(null);
-      setTrustedForm({ name: "", relation: "", contact: "" });
+      setTrustedForm({ name: "", relation: "", contact: "", releaseEmail: "", phoneNumber: "" });
     }
     setShowTrustedForm(true);
   };
@@ -129,6 +153,7 @@ export default function VaultPage() {
 
     const vault = (await loadVaultData()) ?? emptyVaultData();
     const currentContacts = vault.trustedContacts ?? [];
+    const trustedContactId = editingTrustedId ?? crypto.randomUUID();
     const nextContacts = editingTrustedId
       ? currentContacts.map((contact) =>
           contact.id === editingTrustedId
@@ -143,7 +168,7 @@ export default function VaultPage() {
       : [
           ...currentContacts,
           {
-            id: crypto.randomUUID(),
+            id: trustedContactId,
             name: trustedForm.name.trim(),
             relation: trustedForm.relation.trim() || undefined,
             contact: trustedForm.contact.trim(),
@@ -154,6 +179,19 @@ export default function VaultPage() {
       ...vault,
       trustedContacts: nextContacts,
     });
+    if (trustedForm.releaseEmail.trim()) {
+      if (!canManageReleaseChannels) {
+        setTrustedStatus("Trusted contact saved locally. Sign in and enable encrypted backup to store release email and phone for emergency delivery.");
+      } else {
+        await saveTrustedContactReleaseChannel({
+          trustedContactId,
+          releaseEmail: trustedForm.releaseEmail.trim(),
+          phoneNumber: trustedForm.phoneNumber.trim() || null,
+        });
+      }
+    } else if (editingTrustedId && canManageReleaseChannels && releaseChannels[editingTrustedId]) {
+      await deleteTrustedContactReleaseChannel(editingTrustedId).catch(() => undefined);
+    }
     setTrustedStatus(editingTrustedId ? "Trusted contact updated." : "Trusted contact added.");
     resetTrustedForm();
     await refreshData();
@@ -165,6 +203,9 @@ export default function VaultPage() {
       ...vault,
       trustedContacts: (vault.trustedContacts ?? []).filter((contact) => contact.id !== id),
     });
+    if (canManageReleaseChannels) {
+      await deleteTrustedContactReleaseChannel(id).catch(() => undefined);
+    }
     setTrustedStatus("Trusted contact removed.");
     if (editingTrustedId === id) {
       resetTrustedForm();
@@ -262,6 +303,10 @@ export default function VaultPage() {
                   <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Trusted Contacts</p>
                   <h3 className="mt-1 text-lg font-semibold text-slate-900">Deadman switch recipients</h3>
                   <p className="mt-1 text-xs text-slate-500">Add up to 3 people who would matter if the deadman switch is missed.</p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                    Release email and optional phone are stored separately from the encrypted vault for emergency delivery.
+                    Trusted contacts still need your recovery key from you directly. MyAmanah never sends that key.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -282,6 +327,17 @@ export default function VaultPage() {
                           <p className="text-sm font-semibold text-slate-900">{contact.name}</p>
                           <p className="mt-1 text-xs text-slate-500">{contact.relation || "Trusted contact"}</p>
                           <p className="mt-2 text-sm text-slate-700">{contact.contact}</p>
+                          {releaseChannels[contact.id] ? (
+                            <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900">
+                              <p className="font-semibold">Emergency delivery</p>
+                              <p className="mt-1">{releaseChannels[contact.id].releaseEmail}</p>
+                              <p className="mt-1 text-emerald-800/80">
+                                {releaseChannels[contact.id].phoneNumber
+                                  ? `Phone fallback: ${releaseChannels[contact.id].phoneNumber}`
+                                  : "Phone fallback not set"}
+                              </p>
+                            </div>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-2">
                           <button type="button" className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-emerald-700" onClick={() => openTrustedForm(contact)}>
@@ -322,6 +378,29 @@ export default function VaultPage() {
                         onChange={(event) => setTrustedForm((current) => ({ ...current, contact: event.target.value }))}
                       />
                     </FloatingField>
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] leading-relaxed text-amber-900">
+                      Release email is used for secure retrieval links through Resend. Phone is optional and only kept for manual follow-up if the email is ignored.
+                    </div>
+                    <FloatingField label="Release Email" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
+                      <input
+                        type="email"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        value={trustedForm.releaseEmail}
+                        onChange={(event) => setTrustedForm((current) => ({ ...current, releaseEmail: event.target.value }))}
+                      />
+                    </FloatingField>
+                    <FloatingField label="Phone Number (Optional)" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
+                      <input
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                        value={trustedForm.phoneNumber}
+                        onChange={(event) => setTrustedForm((current) => ({ ...current, phoneNumber: event.target.value }))}
+                      />
+                    </FloatingField>
+                    {!canManageReleaseChannels ? (
+                      <p className="text-[11px] leading-relaxed text-slate-500">
+                        Sign in and enable encrypted backup to save release email and phone for deadman delivery.
+                      </p>
+                    ) : null}
                     <div className="flex items-center gap-3">
                       <button type="button" className="flex-1 rounded-2xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white" onClick={() => void saveTrustedContact()}>
                         {editingTrustedId ? "Update Contact" : "Save Contact"}
@@ -404,6 +483,9 @@ export default function VaultPage() {
                 </p>
                 <p className="text-sm leading-relaxed text-slate-600">
                   Trusted contacts are the people who matter if your deadman switch check-in is missed. Add up to three so their names and contact details stay with your vault records.
+                </p>
+                <p className="text-sm leading-relaxed text-slate-600">
+                  Release email and optional phone fields are stored separately from the encrypted vault so MyAmanah can deliver secure claim links if the deadman switch releases. Trusted contacts still need your recovery key from you separately.
                 </p>
                 <p className="text-sm leading-relaxed text-slate-600">
                   Your sensitive details stay encrypted in the local vault unless you explicitly enable encrypted backup from Settings.

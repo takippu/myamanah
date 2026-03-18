@@ -61,6 +61,7 @@ export type VaultData = {
     schemaVersion: number;
     updatedAt: string;
     deadmanLastCheckInAt?: string | null;
+    profileName?: string;
   };
 };
 

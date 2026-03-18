@@ -6,7 +6,7 @@ import { AppBottomNav } from "../components/app-bottom-nav";
 import { ChecklistItemSkeleton } from "../components/skeletons";
 import { VaultSessionGuard } from "../components/vault-session-guard";
 import { emptyVaultData, type VaultData } from "@/lib/vault-data";
-import { getVaultStatus, loadVaultData, markRecoveryVerified, saveVaultData } from "@/lib/vault-client";
+import { getVaultStatus, loadVaultData, markRecoveryVerified, saveVaultData, verifyLocalVaultCredentials } from "@/lib/vault-client";
 
 type ChecklistItem = {
   id: string;
@@ -22,6 +22,13 @@ export default function ChecklistPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [recoveryVerifiedAt, setRecoveryVerifiedAt] = useState<string | null>(null);
   const [vaultUpdatedAt, setVaultUpdatedAt] = useState<string | null>(null);
+  const [showDrillDrawer, setShowDrillDrawer] = useState(false);
+  const [drillStep, setDrillStep] = useState<"input" | "verifying" | "success" | "error">("input");
+  const [drillPassphrase, setDrillPassphrase] = useState("");
+  const [drillRecoveryKey, setDrillRecoveryKey] = useState("");
+  const [drillError, setDrillError] = useState<string | null>(null);
+  const [showDrillPassphrase, setShowDrillPassphrase] = useState(false);
+  const [showDrillRecoveryKey, setShowDrillRecoveryKey] = useState(false);
 
   const refreshData = async () => {
     try {
@@ -55,6 +62,13 @@ export default function ChecklistPage() {
   const items = useMemo<ChecklistItem[]>(() => {
     const v = vault ?? emptyVaultData();
     return [
+      {
+        id: "deadman_checkin",
+        label: "Deadman switch armed",
+        desc: "Check in to activate your deadman switch protection.",
+        done: Boolean(v.meta?.deadmanLastCheckInAt),
+        href: "/dashboard",
+      },
       {
         id: "assets",
         label: "Assets mapped",
@@ -118,6 +132,44 @@ export default function ChecklistPage() {
     if (diffMs < hour) return `${Math.floor(diffMs / minute)} minutes ago`;
     return `${Math.floor(diffMs / hour)} hours ago`;
   }, [vaultUpdatedAt]);
+
+  const openDrillDrawer = () => {
+    setShowDrillDrawer(true);
+    setDrillStep("input");
+    setDrillPassphrase("");
+    setDrillRecoveryKey("");
+    setDrillError(null);
+    setShowDrillPassphrase(false);
+    setShowDrillRecoveryKey(false);
+  };
+
+  const runRecoveryDrill = async () => {
+    if (!drillPassphrase.trim() || !drillRecoveryKey.trim()) {
+      setDrillError("Both passphrase and recovery key are required.");
+      return;
+    }
+
+    setDrillStep("verifying");
+    setDrillError(null);
+
+    try {
+      // Attempt to verify credentials by decrypting local vault
+      await verifyLocalVaultCredentials(drillPassphrase.trim(), drillRecoveryKey.trim());
+      
+      // Success! Mark as tested
+      await updateRecovery("recoveryTested", true);
+      setDrillStep("success");
+      
+      // Close drawer after short delay
+      setTimeout(() => {
+        setShowDrillDrawer(false);
+      }, 2000);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Verification failed";
+      setDrillError(msg);
+      setDrillStep("error");
+    }
+  };
 
   const updateRecovery = async (key: "recoveryKeySaved" | "recoveryTested", value: boolean) => {
     const base = vault ?? emptyVaultData();
@@ -335,7 +387,7 @@ export default function ChecklistPage() {
                 <button
                   className="w-full rounded-[1.1rem] bg-emerald-800 py-3 text-center text-sm font-semibold tracking-wide text-white shadow-lg shadow-emerald-900/20 transition-all active:scale-[0.98] hover:bg-emerald-900"
                   type="button"
-                  onClick={() => updateRecovery("recoveryTested", true)}
+                  onClick={openDrillDrawer}
                 >
                   <span className="flex items-center justify-center gap-2">
                     <span className="material-symbols-outlined">play_circle</span>
@@ -386,6 +438,135 @@ export default function ChecklistPage() {
             </div>
           </div>
         </main>
+
+        {/* Recovery Drill Drawer */}
+        {showDrillDrawer && (
+          <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 px-4 pb-6 pt-12 sm:items-center sm:justify-center">
+            <div className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.45)]">
+              {drillStep === "input" && (
+                <>
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+                      <span className="material-symbols-outlined">vpn_key</span>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">Recovery Drill</h3>
+                      <p className="text-xs text-slate-500">Test your credentials work</p>
+                    </div>
+                  </div>
+                  
+                  <p className="mb-4 text-sm text-slate-600">
+                    Enter your passphrase and recovery key to verify you can decrypt your vault. 
+                    This simulates restoring on a new device.
+                  </p>
+
+                  {drillError ? (
+                    <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-3">
+                      <p className="text-xs font-semibold text-rose-700">{drillError}</p>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <input
+                        type={showDrillPassphrase ? "text" : "password"}
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-emerald-500"
+                        placeholder="Enter your passphrase"
+                        value={drillPassphrase}
+                        onChange={(e) => setDrillPassphrase(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDrillPassphrase(!showDrillPassphrase)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">
+                          {showDrillPassphrase ? "visibility_off" : "visibility"}
+                        </span>
+                      </button>
+                    </div>
+                    
+                    <div className="relative">
+                      <input
+                        type={showDrillRecoveryKey ? "text" : "password"}
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-emerald-500"
+                        placeholder="Enter your recovery key"
+                        value={drillRecoveryKey}
+                        onChange={(e) => setDrillRecoveryKey(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDrillRecoveryKey(!showDrillRecoveryKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">
+                          {showDrillRecoveryKey ? "visibility_off" : "visibility"}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowDrillDrawer(false)}
+                      className="flex-1 rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void runRecoveryDrill()}
+                      disabled={!drillPassphrase.trim() || !drillRecoveryKey.trim()}
+                      className="flex-1 rounded-2xl bg-emerald-800 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      Verify
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {drillStep === "verifying" && (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100">
+                    <span className="material-symbols-outlined animate-spin text-3xl text-emerald-600">progress_activity</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900">Verifying...</h3>
+                  <p className="mt-1 text-sm text-slate-500">Testing your credentials</p>
+                </div>
+              )}
+
+              {drillStep === "success" && (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100">
+                    <span className="material-symbols-outlined text-3xl text-emerald-600">check_circle</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900">Recovery Verified!</h3>
+                  <p className="mt-1 text-sm text-slate-500">Your credentials work correctly</p>
+                </div>
+              )}
+
+              {drillStep === "error" && (
+                <>
+                  <div className="flex flex-col items-center justify-center py-6">
+                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-100">
+                      <span className="material-symbols-outlined text-3xl text-rose-600">error</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900">Verification Failed</h3>
+                    <p className="mt-1 text-center text-sm text-slate-500">{drillError}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDrillStep("input")}
+                    className="w-full rounded-2xl bg-emerald-800 py-3 text-sm font-semibold text-white"
+                  >
+                    Try Again
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="glass fixed bottom-0 left-0 right-0 border-t border-white/50 bg-white/80 pb-6 pt-3">

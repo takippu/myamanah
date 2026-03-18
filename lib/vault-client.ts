@@ -4,6 +4,7 @@ import {
   encryptVaultData,
   type EncryptedVaultPayload,
 } from "@/lib/vault-crypto";
+import type { TrustedContactReleaseChannel } from "@prisma/client";
 import { reportVaultMetrics } from "@/lib/vault-metrics";
 import { getVaultSecrets } from "@/lib/vault-session";
 
@@ -28,7 +29,19 @@ function isCloudBackupEnabled() {
   return window.localStorage.getItem(CLOUD_BACKUP_ENABLED_KEY) === "1";
 }
 
-function setCloudBackupEnabled(value: boolean) {
+async function isAuthenticated(): Promise<boolean> {
+  try {
+    const response = await fetch("/api/auth/me", { 
+      credentials: "include",
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export function setCloudBackupEnabled(value: boolean) {
   if (!isBrowser()) return;
   window.localStorage.setItem(CLOUD_BACKUP_ENABLED_KEY, value ? "1" : "0");
 }
@@ -100,6 +113,56 @@ export async function verifyLocalVaultCredentials(
   return normalizeVaultData(parsed);
 }
 
+/**
+ * Restore vault from cloud backup and verify credentials.
+ * This is used when switching to a new device/browser.
+ */
+export async function restoreVaultFromCloud(
+  passphrase: string,
+  recoveryKey: string,
+): Promise<VaultData> {
+  // Check if authenticated
+  if (!(await isAuthenticated())) {
+    throw new Error("You must be signed in to restore from cloud backup.");
+  }
+
+  // Download encrypted backup from server
+  const response = await fetch("/api/vault", {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (response.status === 401) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+  if (response.status === 403) {
+    throw new Error("Cloud backup is not enabled for this account.");
+  }
+  if (response.status === 404) {
+    throw new Error("No cloud backup found. Make sure you enabled backup on your other device.");
+  }
+  if (!response.ok) {
+    throw new Error("Failed to download cloud backup.");
+  }
+
+  const payload = (await response.json()) as EncryptedVaultPayload;
+
+  // Try to decrypt with provided credentials
+  try {
+    const plaintext = await decryptVaultData(payload, passphrase, recoveryKey);
+    const parsed = JSON.parse(plaintext) as VaultData;
+    
+    // Success! Save locally for future use
+    setLocalEncryptedPayload(payload);
+    setCloudBackupEnabled(true);
+    
+    return normalizeVaultData(parsed);
+  } catch {
+    throw new Error("Incorrect passphrase or recovery key. Please check and try again.");
+  }
+}
+
 export async function loadVaultData(): Promise<VaultData | null> {
   const secrets = ensureSecrets();
   let payload = getLocalEncryptedPayload();
@@ -129,7 +192,7 @@ export async function getVaultStatus(): Promise<{
   if (!data) return null;
 
   let recoveryVerifiedAt: string | null = null;
-  if (isCloudBackupEnabled()) {
+  if (isCloudBackupEnabled() && await isAuthenticated()) {
     const response = await fetch("/api/vault", {
       method: "GET",
       credentials: "include",
@@ -164,7 +227,7 @@ export async function saveVaultData(vaultData: VaultData): Promise<void> {
 
   setLocalEncryptedPayload(payload);
 
-  if (isCloudBackupEnabled()) {
+  if (isCloudBackupEnabled() && await isAuthenticated()) {
     const response = await fetch("/api/vault", {
       method: "PUT",
       headers: {
@@ -195,13 +258,14 @@ export async function initializeVaultIfMissing(): Promise<"created" | "exists"> 
 
   setLocalEncryptedPayload(payload);
 
-  if (isCloudBackupEnabled()) {
+  if (isCloudBackupEnabled() && await isAuthenticated()) {
     const initRes = await fetch("/api/vault/init", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify(payload),
     });
+    // 409 = vault already exists
     if (!initRes.ok && initRes.status !== 409) {
       throw new Error("Failed to initialize vault backup");
     }
@@ -220,6 +284,13 @@ export async function checkInDeadmanSwitch(): Promise<VaultData> {
     },
   };
   await saveVaultData(next);
+  // Only call server if authenticated
+  if (await isAuthenticated()) {
+    await fetch("/api/deadman/check-in", {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => undefined);
+  }
   return next;
 }
 
@@ -237,6 +308,7 @@ export async function getCloudBackupStatus(): Promise<{
   backupEnabled: boolean;
   consentedAt: string | null;
   revokedAt: string | null;
+  lastSyncedAt: string | null;
 }> {
   const response = await fetch("/api/privacy/consent/backup", {
     method: "GET",
@@ -248,6 +320,7 @@ export async function getCloudBackupStatus(): Promise<{
       backupEnabled: isCloudBackupEnabled(),
       consentedAt: null,
       revokedAt: null,
+      lastSyncedAt: null,
     };
   }
 
@@ -255,6 +328,7 @@ export async function getCloudBackupStatus(): Promise<{
     backupEnabled?: boolean;
     consentedAt?: string | null;
     revokedAt?: string | null;
+    lastSyncedAt?: string | null;
   };
   const enabled = Boolean(payload.backupEnabled);
   setCloudBackupEnabled(enabled);
@@ -263,6 +337,7 @@ export async function getCloudBackupStatus(): Promise<{
     backupEnabled: enabled,
     consentedAt: payload.consentedAt ?? null,
     revokedAt: payload.revokedAt ?? null,
+    lastSyncedAt: payload.lastSyncedAt ?? null,
   };
 }
 
@@ -293,4 +368,92 @@ export async function disableCloudBackup(): Promise<void> {
   });
   if (!response.ok) throw new Error("Failed to disable cloud backup");
   setCloudBackupEnabled(false);
+}
+
+export async function getTrustedContactReleaseChannels(): Promise<TrustedContactReleaseChannel[]> {
+  const response = await fetch("/api/trusted-contacts/release-channels", {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    return [];
+  }
+  const payload = (await response.json()) as { channels?: TrustedContactReleaseChannel[] };
+  return payload.channels ?? [];
+}
+
+export async function saveTrustedContactReleaseChannel(args: {
+  trustedContactId: string;
+  releaseEmail: string;
+  phoneNumber?: string | null;
+}) {
+  const response = await fetch("/api/trusted-contacts/release-channels", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(args),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to save release delivery details.");
+  }
+  return response.json();
+}
+
+export async function deleteTrustedContactReleaseChannel(trustedContactId: string) {
+  const response = await fetch("/api/trusted-contacts/release-channels", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ trustedContactId }),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to remove release delivery details.");
+  }
+}
+
+export async function getReleasePackageStatus(token: string): Promise<{
+  expiresAt: string;
+  firstViewedAt: string | null;
+  downloadedAt: string | null;
+  acceptedAt: string | null;
+  requiresRecoveryKey: boolean;
+  message: string;
+}> {
+  const response = await fetch(`/api/release/${encodeURIComponent(token)}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(response.status === 410 ? "This secure retrieval link has expired." : "Unable to open secure retrieval link.");
+  }
+  return response.json();
+}
+
+export async function acceptReleasePackage(token: string): Promise<void> {
+  const response = await fetch(`/api/release/${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "accept" }),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to accept release instructions.");
+  }
+}
+
+export async function downloadReleasePackage(token: string): Promise<EncryptedVaultPayload> {
+  const response = await fetch(`/api/release/${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "download" }),
+  });
+  if (!response.ok) {
+    throw new Error(response.status === 410 ? "This secure retrieval link has expired." : "Failed to download encrypted backup.");
+  }
+  const payload = (await response.json()) as { encryptedPayload: EncryptedVaultPayload };
+  return payload.encryptedPayload;
 }

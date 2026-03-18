@@ -8,6 +8,7 @@ import { ConfirmActionModal } from "../components/confirm-action-modal";
 import { FloatingField } from "../components/floating-field";
 import { HeroSkeleton,  ListItemSkeleton } from "../components/skeletons";
 import { RecordListDrawer } from "../components/record-list-drawer";
+import { UnlockVaultDrawer } from "../components/unlock-vault-drawer";
 import { VaultSessionGuard } from "../components/vault-session-guard";
 import { emptyVaultData, type AssetRecord, type VaultContact } from "@/lib/vault-data";
 import { loadVaultData, saveVaultData } from "@/lib/vault-client";
@@ -56,10 +57,12 @@ export default function AssetsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<"success" | "error">("success");
+  const [showUnlockDrawer, setShowUnlockDrawer] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [showFormDrawer, setShowFormDrawer] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
   const [form, setForm] = useState({
     assetType: "",
     institution: "",
@@ -73,8 +76,16 @@ export default function AssetsPage() {
     try {
       const vault = await loadVaultData();
       setAssets(vault?.assets ?? []);
-    } catch {
-      setStatusMessage("Could not load assets.");
+      setShowUnlockDrawer(false);
+    } catch (error) {
+      // Check if vault is locked (session expired or not unlocked)
+      const errorMsg = error instanceof Error ? error.message : "";
+      if (errorMsg.includes("not configured") || errorMsg.includes("Vault access")) {
+        setStatusMessage("Vault is locked. Please unlock to view your assets.");
+        setShowUnlockDrawer(true);
+      } else {
+        setStatusMessage("Could not load assets. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -103,6 +114,7 @@ export default function AssetsPage() {
 
   const resetForm = () => {
     setEditingId(null);
+    setFormErrors([]);
     setForm({
       assetType: "",
       institution: "",
@@ -114,11 +126,17 @@ export default function AssetsPage() {
   };
 
   const onSaveAsset = async () => {
-    if (!form.assetType.trim() || !form.institution.trim() || !form.whereToFind.trim()) {
-      setStatusTone("error");
-      setStatusMessage("Asset type, institution, and where to find documents are required.");
+    const errors: string[] = [];
+    if (!form.assetType.trim()) errors.push("Asset type is required");
+    if (!form.institution.trim()) errors.push("Institution is required");
+    if (!form.whereToFind.trim()) errors.push("Where to find documents is required");
+    
+    if (errors.length > 0) {
+      setFormErrors(errors);
       return;
     }
+    
+    setFormErrors([]);
 
     setIsSaving(true);
     const wasEditing = Boolean(editingId);
@@ -327,58 +345,32 @@ export default function AssetsPage() {
                   router.push(`/asset-records/${item.id}`);
                 }
               }}
-              className="glass-card rounded-3xl border border-[#e7eaee] bg-white/85 p-5 transition-all duration-300 hover:-translate-y-[2px]"
+              className="rounded-[2rem] bg-slate-50 p-5 transition-all duration-200 hover:bg-slate-100 active:scale-[0.98]"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                    <span className="material-symbols-outlined">account_balance_wallet</span>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{item.assetType || "Asset"}</p>
-                    <h3 className="text-lg font-bold text-slate-900">{item.institution}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{item.whereToFind}</p>
-                  </div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">{item.assetType || "Asset"}</p>
+                  <h3 className="truncate text-lg font-bold text-slate-900">{item.institution}</h3>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Estimated Value</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">{item.value || "Not set"}</p>
-                </div>
-              </div>
-              <div className="mt-5 flex items-center justify-end gap-2">
                 <button
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-700 transition-colors hover:bg-slate-50"
                   type="button"
-                  aria-label={`View ${item.institution}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    router.push(`/asset-records/${item.id}`);
-                  }}
-                >
-                  <span className="material-symbols-outlined text-[18px]">visibility</span>
-                </button>
-                <button
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 transition-colors hover:bg-emerald-200"
-                  type="button"
-                  aria-label={`Edit ${item.institution}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onEditAsset(item);
                   }}
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 transition-colors hover:bg-emerald-200"
+                  aria-label={`Edit ${item.institution}`}
                 >
-                  <span className="material-symbols-outlined text-[18px]">edit</span>
+                  <span className="material-symbols-outlined text-[20px]">edit</span>
                 </button>
-                <button
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-100 text-rose-700 transition-colors hover:bg-rose-200"
-                  type="button"
-                  aria-label={`Delete ${item.institution}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setPendingDeleteId(item.id);
-                  }}
-                >
-                  <span className="material-symbols-outlined text-[18px]">delete</span>
-                </button>
+              </div>
+              
+              <div className="mt-4 flex items-end justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Value</p>
+                  <p className="text-xl font-bold text-emerald-600">{item.value || "—"}</p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
               </div>
             </article>
           ))}
@@ -403,6 +395,16 @@ export default function AssetsPage() {
           }
         >
           <div className="space-y-4 pt-2">
+            {formErrors.length > 0 ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-3">
+                <p className="text-xs font-semibold text-rose-700">Please fill in all required fields:</p>
+                <ul className="mt-1 list-disc pl-4 text-xs text-rose-600">
+                  {formErrors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="px-1">
               <p className="text-xs leading-5 text-slate-500">
                 Keep it simple. Save what the asset is, where its documents are, and who to call if needed.
@@ -411,25 +413,31 @@ export default function AssetsPage() {
 
             <section className="rounded-[1.7rem] border border-slate-200 bg-white p-4 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.28)]">
               <div className="space-y-3">
-                <FloatingField label="Asset Type" labelClassName="text-emerald-700">
+                <FloatingField label="Asset Type *" labelClassName="text-emerald-700">
                   <input
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-emerald-500"
+                    className={`w-full rounded-2xl border bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-emerald-500 ${
+                      formErrors.some(e => e.includes("Asset type")) && !form.assetType.trim() ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                    }`}
                     placeholder="Asset type (e.g. Takaful)"
                     value={form.assetType}
                     onChange={(e) => setForm((p) => ({ ...p, assetType: e.target.value }))}
                   />
                 </FloatingField>
-                <FloatingField label="Institution" labelClassName="text-emerald-700">
+                <FloatingField label="Institution *" labelClassName="text-emerald-700">
                   <input
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-emerald-500"
+                    className={`w-full rounded-2xl border bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-emerald-500 ${
+                      formErrors.some(e => e.includes("Institution")) && !form.institution.trim() ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                    }`}
                     placeholder="Institution or provider"
                     value={form.institution}
                     onChange={(e) => setForm((p) => ({ ...p, institution: e.target.value }))}
                   />
                 </FloatingField>
-                <FloatingField label="Documents Where" labelClassName="text-emerald-700">
+                <FloatingField label="Documents Where *" labelClassName="text-emerald-700">
                   <input
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-emerald-500"
+                    className={`w-full rounded-2xl border bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-emerald-500 ${
+                      formErrors.some(e => e.includes("Where to find")) && !form.whereToFind.trim() ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                    }`}
                     placeholder="Where to find documents"
                     value={form.whereToFind}
                     onChange={(e) => setForm((p) => ({ ...p, whereToFind: e.target.value }))}
@@ -511,6 +519,16 @@ export default function AssetsPage() {
             </FloatingField>
           </div>
         </RecordListDrawer>
+
+        <UnlockVaultDrawer
+          open={showUnlockDrawer}
+          onClose={() => setShowUnlockDrawer(false)}
+          onUnlock={() => {
+            setStatusMessage("Vault unlocked successfully!");
+            setStatusTone("success");
+            void refreshData();
+          }}
+        />
 
         <ConfirmActionModal
           open={pendingDeleteId !== null}

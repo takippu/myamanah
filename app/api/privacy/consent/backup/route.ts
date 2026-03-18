@@ -1,19 +1,34 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUserFromRequest } from "@/lib/auth";
+import { deleteVaultBackup } from "@/lib/sqlite-backup";
+import { recordReleaseAuditEvent } from "@/lib/release-audit";
 
+/**
+ * GET /api/privacy/consent/backup
+ * Get current backup consent status and last backup time
+ */
 export async function GET() {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const consent = await prisma.userPrivacyConsent.findUnique({ where: { userId: user.id } });
+  const [consent, vaultBackup] = await Promise.all([
+    prisma.userPrivacyConsent.findUnique({ where: { userId: user.id } }),
+    prisma.vaultBackup.findUnique({ where: { userId: user.id } }),
+  ]);
+
   return NextResponse.json({
     backupEnabled: Boolean(consent?.backupEnabled),
     consentedAt: consent?.consentedAt ?? null,
     revokedAt: consent?.revokedAt ?? null,
+    lastSyncedAt: vaultBackup?.lastBackedUpAt ?? null,
   });
 }
 
+/**
+ * POST /api/privacy/consent/backup
+ * Enable backup consent
+ */
 export async function POST() {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -41,6 +56,10 @@ export async function POST() {
   });
 }
 
+/**
+ * DELETE /api/privacy/consent/backup
+ * Revoke backup consent and delete stored backup
+ */
 export async function DELETE() {
   const user = await getAuthUserFromRequest();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -59,7 +78,15 @@ export async function DELETE() {
     },
   });
 
-  await prisma.vault.deleteMany({ where: { userId: user.id } });
+  // Delete SQLite backup if exists
+  const hasBackup = await prisma.vaultBackup.findUnique({ 
+    where: { userId: user.id } 
+  });
+  
+  if (hasBackup) {
+    await deleteVaultBackup(user.id);
+    await recordReleaseAuditEvent({ userId: user.id, type: "backup_deleted" });
+  }
 
   return NextResponse.json({ backupEnabled: false, revokedAt: now });
 }
