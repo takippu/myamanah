@@ -136,8 +136,33 @@ export default function DashboardPage() {
       });
     }
 
+    // Check if deadman switch needs check-in
+    const deadmanLastCheck = vault?.meta?.deadmanLastCheckInAt;
+    let needsCheckIn = false;
+    let checkInDetail = "Arm your vault protection. Tap to check in.";
+    
+    if (!deadmanLastCheck) {
+      needsCheckIn = true;
+    } else {
+      const daysSince = Math.floor((Date.now() - new Date(deadmanLastCheck).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSince >= 30) {
+        needsCheckIn = true;
+        checkInDetail = "Your check-in is overdue. Tap to update.";
+      }
+    }
+    
+    if (needsCheckIn) {
+      items.push({
+        href: "#",
+        icon: "timer",
+        title: "Check in to deadman switch",
+        detail: checkInDetail,
+        iconClassName: "bg-rose-100 text-rose-600",
+      });
+    }
+
     return items;
-  }, [assetCount, debtCount, digitalLegacyCount, wishCompleted, wishTotal, wishesDone]);
+  }, [assetCount, debtCount, digitalLegacyCount, wishCompleted, wishTotal, wishesDone, vault?.meta?.deadmanLastCheckInAt]);
 
   const allCoreRecordsReady =
     assetCount > 0 && debtCount > 0 && digitalLegacyCount > 0 && wishesDone;
