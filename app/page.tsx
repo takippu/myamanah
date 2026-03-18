@@ -17,6 +17,12 @@ const features = [
     color: "emerald",
   },
   {
+    icon: "receipt_long",
+    title: "Debt Records",
+    description: "Record your liabilities clearly for settlement. Credit cards, loans, mortgages, and outstanding obligations.",
+    color: "orange",
+  },
+  {
     icon: "fingerprint",
     title: "Digital Legacy",
     description: "Preserve access to your digital life. Social media, emails, cloud storage, and online accounts.",
