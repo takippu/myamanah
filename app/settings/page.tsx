@@ -74,11 +74,16 @@ function SettingsPageContent() {
     const handlePostLogin = async () => {
       if (!isAuthenticated || backupBusy) return;
       
-      // Check if local vault exists
-      const status = await getVaultStatus();
-      const hasLocalVault = Boolean(status?.updatedAt);
+      // Check server for cloud backup status (not local state)
+      const [vaultStatus, backupStatus] = await Promise.all([
+        getVaultStatus(),
+        getCloudBackupStatus(),
+      ]);
       
-      if (hasLocalVault && !backupEnabled) {
+      const hasLocalVault = Boolean(vaultStatus?.updatedAt);
+      const hasCloudBackup = backupStatus.backupEnabled;
+      
+      if (hasLocalVault && !hasCloudBackup) {
         // Has local vault but backup not enabled - auto-enable backup
         setBackupMessage("Syncing your vault to cloud...");
         try {
@@ -88,14 +93,14 @@ function SettingsPageContent() {
         } catch {
           setBackupMessage("Could not auto-sync. Please click Enable Backup manually.");
         }
-      } else if (!hasLocalVault && backupEnabled) {
+      } else if (!hasLocalVault && hasCloudBackup) {
         // No local vault but has cloud backup - redirect to restore
         window.location.href = "/access?restore=1";
       }
     };
     
     void handlePostLogin();
-  }, [isAuthenticated, backupEnabled, backupBusy]);
+  }, [isAuthenticated, backupBusy]);
 
   // Refresh when page becomes visible
   useEffect(() => {
