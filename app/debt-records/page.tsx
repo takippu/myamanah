@@ -355,17 +355,30 @@ export default function DebtsPage() {
                   <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">{item.debtType || "Debt"}</p>
                   <h3 className="truncate text-lg font-bold text-slate-900">{item.creditor}</h3>
                 </div>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onEditDebt(item);
-                  }}
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-700 transition-colors hover:bg-rose-200"
-                  aria-label={`Edit ${item.creditor}`}
-                >
-                  <span className="material-symbols-outlined text-[20px]">edit</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEditDebt(item);
+                    }}
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-700 transition-colors hover:bg-rose-200"
+                    aria-label={`Edit ${item.creditor}`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPendingDeleteId(item.id);
+                    }}
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-rose-100/50 text-rose-600 transition-colors hover:bg-rose-100"
+                    aria-label={`Delete ${item.creditor}`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">delete</span>
+                  </button>
+                </div>
               </div>
               
               <div className="mt-4 flex items-end justify-between">
