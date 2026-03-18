@@ -407,15 +407,11 @@ export default function VaultPage() {
           <section className="space-y-4">
             {/* Trusted Contacts Section */}
             <div className="rounded-[1.75rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.06)]">
+              {/* Header row with title and buttons */}
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Trusted Contacts</p>
                   <h3 className="mt-1 text-lg font-semibold text-slate-900">Deadman switch recipients</h3>
-                  <p className="mt-1 text-xs text-slate-500">Add up to 3 people who would matter if the deadman switch is missed.</p>
-                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-                    Release email and optional phone are stored separately from the encrypted vault for emergency delivery.
-                    Trusted contacts still need your recovery key from you directly. MyAmanah never sends that key.
-                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {canSendTestEmail && (
@@ -439,6 +435,12 @@ export default function VaultPage() {
                   </button>
                 </div>
               </div>
+              {/* Description - full width */}
+              <p className="text-xs text-slate-500">Add up to 3 people who would matter if the deadman switch is missed.</p>
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                Release email and optional phone are stored separately from the encrypted vault for emergency delivery.
+                Trusted contacts still need your recovery key from you directly. MyAmanah never sends that key.
+              </p>
               {testEmailStatus ? <p className="mb-2 text-xs font-medium text-amber-700">{testEmailStatus}</p> : null}
               {trustedStatus ? <p className="mb-3 text-xs font-medium text-emerald-700">{trustedStatus}</p> : null}
               <div className="space-y-3">
@@ -453,8 +455,8 @@ export default function VaultPage() {
                         releaseChannel={channel}
                         onEdit={() => openTrustedForm(contact)}
                         onDelete={() => void deleteTrustedContact(contact.id)}
-                        canNotify={hasReleaseEmail && canManageReleaseChannels}
-                        onNotify={hasReleaseEmail && canManageReleaseChannels ? () => {
+                        canNotify={hasReleaseEmail}
+                        onNotify={hasReleaseEmail ? () => {
                           openNotifyDialog(contact.id, contact.name, channel!.releaseEmail);
                         } : undefined}
                       />
@@ -773,11 +775,12 @@ function TrustedContactCard({
             {canNotify && onNotify && (
               <button 
                 type="button" 
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-600 transition-colors hover:bg-sky-50 hover:text-sky-700" 
+                className="flex h-9 items-center justify-center gap-1 rounded-xl bg-sky-50 px-3 text-sky-700 transition-colors hover:bg-sky-100" 
                 onClick={onNotify}
-                title="Notify contact"
+                title="Notify contact now"
               >
                 <span className="material-symbols-outlined text-[18px]">notifications_active</span>
+                <span className="text-xs font-semibold">Notify</span>
               </button>
             )}
             <button 
