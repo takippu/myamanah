@@ -5,8 +5,8 @@
       <stop offset="100%" style="stop-color:#047857"/>
     </linearGradient>
   </defs>
-  <path d="M50 5 L90 20 V45 C90 70 50 95 50 95 C50 95 10 70 10 45 V20 L50 5Z" fill="url(#shieldGrad)"/>
-  <path d="M50 15 L75 25 V45 C75 62 50 80 50 80 C50 80 25 62 25 45 V25 L50 15Z" fill="none" stroke="white" stroke-width="3" opacity="0.9"/>
-  <path d="M50 30 L50 55 M40 40 L50 30 L60 40" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <circle cx="50" cy="62" r="4" fill="white"/>
+  <!-- Shield shape -->
+  <path d="M50 8 L88 22 V45 C88 68 50 92 50 92 C50 92 12 68 12 45 V22 L50 8Z" fill="url(#shieldGrad)"/>
+  <!-- Checkmark -->
+  <path d="M32 48 L45 62 L68 38" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 </svg>

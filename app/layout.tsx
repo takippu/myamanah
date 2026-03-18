@@ -31,6 +31,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="light">
+      <head>
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            // Prevent FOUC for Material Symbols
+            if (document.fonts) {
+              document.fonts.load('24px "Material Symbols Outlined"').then(() => {
+                document.documentElement.classList.add('fonts-loaded');
+              });
+            }
+          `
+        }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${manrope.variable} ${manrope.className} antialiased`}
       >
