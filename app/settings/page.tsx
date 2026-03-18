@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useRef } from "react";
 import Link from "next/link";
 import { AppBottomNav } from "../components/app-bottom-nav";
 import { VaultSessionGuard } from "../components/vault-session-guard";
@@ -28,13 +28,15 @@ function SettingsPageContent() {
   const [localProfileName, setLocalProfileName] = useState<string>("");
   const [emailQueueStatus, setEmailQueueStatus] = useState<{pending: number; failed: number; sent: number; total: number} | null>(null);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const hasCheckedRestore = useRef(false);
 
   const refreshData = async () => {
     try {
       setLocalProfileName(getLocalProfileName() ?? "");
 
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
-      if (authRes.ok) {
+      const isAuthed = authRes.ok;
+      if (isAuthed) {
         const payload = (await authRes.json()) as { user?: { email?: string } };
         setEmail(payload.user?.email ?? "");
         setIsAuthenticated(true);
@@ -48,6 +50,19 @@ function SettingsPageContent() {
       setBackupEnabled(backupStatus.backupEnabled);
       // Use the actual cloud backup timestamp, not local vault update time
       setLastSynced(backupStatus.lastSyncedAt ?? status?.updatedAt ?? null);
+      
+      // Check if restore is needed (only once per session)
+      if (isAuthed && !hasCheckedRestore.current) {
+        hasCheckedRestore.current = true;
+        const hasLocalVault = Boolean(status?.updatedAt);
+        const hasCloudBackup = backupStatus.backupEnabled;
+        
+        if (!hasLocalVault && hasCloudBackup) {
+          // Redirect immediately to restore flow
+          window.location.replace("/access?restore=1");
+          return;
+        }
+      }
       
       // Load email queue status if user has backup enabled
       if (backupStatus.backupEnabled) {
@@ -69,38 +84,23 @@ function SettingsPageContent() {
     void refreshData();
   }, []);
 
-  // Auto-sync or restore after Google login (when returning from OAuth)
+  // Auto-enable backup for local vault after auth (if not already enabled)
   useEffect(() => {
-    const handlePostLogin = async () => {
-      if (!isAuthenticated || backupBusy) return;
+    const autoEnableBackup = async () => {
+      if (!isAuthenticated || backupBusy || !backupEnabled) return;
       
-      // Check server for cloud backup status (not local state)
-      const [vaultStatus, backupStatus] = await Promise.all([
-        getVaultStatus(),
-        getCloudBackupStatus(),
-      ]);
-      
+      // Check if we need to auto-sync local vault
+      const vaultStatus = await getVaultStatus();
       const hasLocalVault = Boolean(vaultStatus?.updatedAt);
-      const hasCloudBackup = backupStatus.backupEnabled;
       
-      if (hasLocalVault && !hasCloudBackup) {
-        // Has local vault but backup not enabled - auto-enable backup
-        setBackupMessage("Syncing your vault to cloud...");
-        try {
-          await enableCloudBackup();
-          setBackupEnabled(true);
-          setBackupMessage("✓ Auto-synced! Your vault is now backed up to the cloud.");
-        } catch {
-          setBackupMessage("Could not auto-sync. Please click Enable Backup manually.");
-        }
-      } else if (!hasLocalVault && hasCloudBackup) {
-        // No local vault but has cloud backup - redirect to restore
-        window.location.href = "/access?restore=1";
+      if (hasLocalVault && backupEnabled) {
+        // Already synced, nothing to do
+        return;
       }
     };
     
-    void handlePostLogin();
-  }, [isAuthenticated, backupBusy]);
+    void autoEnableBackup();
+  }, [isAuthenticated, backupEnabled, backupBusy]);
 
   // Refresh when page becomes visible
   useEffect(() => {
