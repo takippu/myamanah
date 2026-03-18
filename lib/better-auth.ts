@@ -9,6 +9,20 @@ export const auth = betterAuth({
   }),
   secret: process.env.BETTER_AUTH_SECRET || "replace-this-dev-secret-before-production",
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
+  advanced: {
+    cookiePrefix: "myamanah",
+    useSecureCookies: process.env.NODE_ENV === "production",
+    defaultCookieAttributes: {
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      path: "/",
+    },
+  },
+  session: {
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: 60 * 60 * 24, // 1 day
+  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
