@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
   <defs>
     <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#059669"/>
       <stop offset="100%" style="stop-color:#047857"/>
     </linearGradient>
   </defs>
-  <!-- Shield shape -->
-  <path d="M50 8 L88 22 V45 C88 68 50 92 50 92 C50 92 12 68 12 45 V22 L50 8Z" fill="url(#shieldGrad)"/>
-  <!-- Checkmark -->
-  <path d="M32 48 L45 62 L68 38" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Shield shape matching Material Symbols verified_user -->
+  <path d="M24 4L6 12v11.2c0 9.2 7.7 17.8 18 20 10.3-2.2 18-10.8 18-20V12L24 4z" fill="url(#shieldGrad)"/>
+  <!-- Checkmark matching Material Symbols style -->
+  <path d="M20 32.4l-7.4-7.4 1.9-1.9 5.5 5.5 11.5-11.5 1.9 1.9L20 32.4z" fill="white"/>
 </svg>

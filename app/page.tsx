@@ -3,6 +3,20 @@
 import Link from "next/link";
 import { useState } from "react";
 
+// Shield icon matching favicon exactly
+const ShieldIcon = ({ className = "w-6 h-6" }: { className?: string }) => (
+  <svg viewBox="0 0 48 48" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="shieldGradPage" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#059669"/>
+        <stop offset="100%" stopColor="#047857"/>
+      </linearGradient>
+    </defs>
+    <path d="M24 4L6 12v11.2c0 9.2 7.7 17.8 18 20 10.3-2.2 18-10.8 18-20V12L24 4z" fill="url(#shieldGradPage)"/>
+    <path d="M20 32.4l-7.4-7.4 1.9-1.9 5.5 5.5 11.5-11.5 1.9 1.9L20 32.4z" fill="white"/>
+  </svg>
+);
+
 const features = [
   {
     icon: "shield_lock",
@@ -57,8 +71,8 @@ export default function LandingPage() {
         {/* Header */}
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/70 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white">
-              <span className="material-symbols-outlined text-[20px]">verified_user</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1.5">
+              <ShieldIcon className="h-full w-full" />
             </div>
             <span className="text-lg font-bold text-slate-800">MyAmanah</span>
           </div>
@@ -125,7 +139,7 @@ export default function LandingPage() {
         {/* Privacy Banner */}
         <section className="mx-6 mb-6 rounded-[1.5rem] bg-slate-800 p-5">
           <div className="flex items-start gap-3">
-            <span className="material-symbols-outlined text-emerald-400">verified_user</span>
+            <ShieldIcon className="h-6 w-6 flex-shrink-0" />
             <div>
               <h3 className="mb-1 font-semibold text-white">Your Data Stays Yours</h3>
               <p className="text-sm leading-relaxed text-slate-300">
@@ -235,7 +249,7 @@ export default function LandingPage() {
         <footer className="border-t border-slate-200 bg-white px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-slate-400">verified_user</span>
+              <ShieldIcon className="h-5 w-5 opacity-50" />
               <span className="text-sm font-semibold text-slate-600">MyAmanah</span>
             </div>
             <p className="text-xs text-slate-400">Privacy-first digital legacy</p>
