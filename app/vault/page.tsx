@@ -332,6 +332,7 @@ export default function VaultPage() {
           )}
 
           <section className="space-y-4">
+            {/* Trusted Contacts Section */}
             <div className="rounded-[1.75rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.06)]">
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div>
@@ -370,38 +371,21 @@ export default function VaultPage() {
               <div className="space-y-3">
                 {(vault?.trustedContacts.length ?? 0) > 0 ? (
                   vault?.trustedContacts.map((contact) => (
-                    <div key={contact.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{contact.name}</p>
-                          <p className="mt-1 text-xs text-slate-500">{contact.relation || "Trusted contact"}</p>
-                          <p className="mt-2 text-sm text-slate-700">{contact.contact}</p>
-                          {releaseChannels[contact.id] ? (
-                            <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900">
-                              <p className="font-semibold">Emergency delivery</p>
-                              <p className="mt-1">{releaseChannels[contact.id].releaseEmail}</p>
-                              <p className="mt-1 text-emerald-800/80">
-                                {releaseChannels[contact.id].phoneNumber
-                                  ? `Phone fallback: ${releaseChannels[contact.id].phoneNumber}`
-                                  : "Phone fallback not set"}
-                              </p>
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button type="button" className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-emerald-700" onClick={() => openTrustedForm(contact)}>
-                            <span className="material-symbols-outlined text-[18px]">edit</span>
-                          </button>
-                          <button type="button" className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-rose-700" onClick={() => void deleteTrustedContact(contact.id)}>
-                            <span className="material-symbols-outlined text-[18px]">delete</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                    <TrustedContactCard
+                      key={contact.id}
+                      contact={contact}
+                      releaseChannel={releaseChannels[contact.id]}
+                      onEdit={() => openTrustedForm(contact)}
+                      onDelete={() => void deleteTrustedContact(contact.id)}
+                    />
                   ))
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-                    No trusted contacts added yet.
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+                      <span className="material-symbols-outlined text-slate-400">group</span>
+                    </div>
+                    <p className="text-sm text-slate-500">No trusted contacts added yet</p>
+                    <p className="mt-1 text-xs text-slate-400">Add someone who should receive your vault if the deadman switch triggers</p>
                   </div>
                 )}
                 {showTrustedForm ? (
@@ -422,16 +406,21 @@ export default function VaultPage() {
                         onChange={(event) => setTrustedForm((current) => ({ ...current, relation: event.target.value }))}
                       />
                     </FloatingField>
-                    <FloatingField label="How To Reach" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
+                    <FloatingField 
+                      label="Preferred Contact Method" 
+                      labelClassName="text-emerald-700" 
+                      backgroundClassName="bg-slate-50"
+                      hint="How you'd normally reach them (for your reference only)"
+                    >
                       <input
                         className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
-                        placeholder="e.g. WhatsApp +6012-345-6789"
+                        placeholder="e.g. Call after 6pm, Telegram, office line"
                         value={trustedForm.contact}
                         onChange={(event) => setTrustedForm((current) => ({ ...current, contact: event.target.value }))}
                       />
                     </FloatingField>
                     <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] leading-relaxed text-amber-900">
-                      Release email is used for secure retrieval links through Resend. Phone is optional and only kept for manual follow-up if the email is ignored.
+                      <span className="font-semibold">Emergency delivery:</span> The release email below is used to send secure retrieval links if the deadman switch triggers. Phone is optional and only for manual follow-up.
                     </div>
                     <FloatingField label="Release Email" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
                       <input
@@ -487,6 +476,7 @@ export default function VaultPage() {
                   title="Debt Records"
                   subtitle="Outstanding liabilities and due dates"
                   badge={counts.debts}
+                  color="rose"
                 />
                 <CategoryCard
                   href="/asset-records"
@@ -494,6 +484,7 @@ export default function VaultPage() {
                   title="Asset Records"
                   subtitle="Ownership, where-to-find, and key contacts"
                   badge={counts.assets}
+                  color="emerald"
                 />
                 <CategoryCard
                   href="/digital-legacy"
@@ -501,6 +492,7 @@ export default function VaultPage() {
                   title="Digital Legacy"
                   subtitle="Social media, email, cloud accounts access"
                   badge={counts.digitalLegacy}
+                  color="violet"
                 />
                 <CategoryCard
                   href="/wishes"
@@ -509,6 +501,7 @@ export default function VaultPage() {
                   subtitle="Religious wishes, family instructions, executor notes"
                   badge={wishesComplete ? "✓" : counts.wishes > 0 ? `${counts.wishes}/4` : undefined}
                   badgeVariant={wishesComplete ? "success" : counts.wishes > 0 ? "partial" : undefined}
+                  color="amber"
                 />
               </>
             )}
@@ -563,6 +556,100 @@ export default function VaultPage() {
   );
 }
 
+function TrustedContactCard({
+  contact,
+  releaseChannel,
+  onEdit,
+  onDelete,
+}: {
+  contact: { id: string; name: string; relation?: string; contact?: string };
+  releaseChannel?: TrustedContactReleaseChannel;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-sm transition-all hover:shadow-md">
+      {/* Top accent bar */}
+      <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400" />
+      
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          {/* Left: Avatar + Info */}
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-700">
+              <span className="material-symbols-outlined text-[22px]">person</span>
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">{contact.name}</p>
+              <p className="text-xs text-slate-500">{contact.relation || "Trusted contact"}</p>
+              
+              {/* Preferred contact */}
+              {contact.contact && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-600">
+                  <span className="material-symbols-outlined text-[14px] text-slate-400">chat</span>
+                  <span className="truncate">{contact.contact}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Right: Actions */}
+          <div className="flex items-center gap-1.5">
+            <button 
+              type="button" 
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700" 
+              onClick={onEdit}
+              title="Edit contact"
+            >
+              <span className="material-symbols-outlined text-[18px]">edit</span>
+            </button>
+            <button 
+              type="button" 
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-600 transition-colors hover:bg-rose-50 hover:text-rose-700" 
+              onClick={onDelete}
+              title="Delete contact"
+            >
+              <span className="material-symbols-outlined text-[18px]">delete</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Emergency Delivery Section */}
+        {releaseChannel ? (
+          <div className="mt-4 rounded-xl border border-emerald-100 bg-gradient-to-r from-emerald-50/80 to-teal-50/50 p-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px] text-emerald-600">mark_email_read</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">Emergency delivery configured</span>
+            </div>
+            <div className="mt-2 space-y-1.5">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="material-symbols-outlined text-[14px] text-emerald-600">email</span>
+                <span className="text-slate-700">{releaseChannel.releaseEmail}</span>
+              </div>
+              {releaseChannel.phoneNumber && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="material-symbols-outlined text-[14px] text-emerald-600">phone</span>
+                  <span className="text-slate-600">{releaseChannel.phoneNumber}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/70 p-3">
+            <div className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[16px] text-amber-600">info</span>
+              <div>
+                <p className="text-[11px] font-medium text-amber-800">Emergency delivery not set up</p>
+                <p className="text-[11px] text-amber-700/80">Add a release email to enable deadman switch delivery</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CategoryCard({
   href,
   icon,
@@ -570,6 +657,7 @@ function CategoryCard({
   subtitle,
   badge,
   badgeVariant,
+  color = "emerald",
 }: {
   href: string;
   icon: string;
@@ -577,7 +665,31 @@ function CategoryCard({
   subtitle: string;
   badge?: number | string;
   badgeVariant?: "success" | "partial";
+  color?: "emerald" | "rose" | "violet" | "amber";
 }) {
+  const colorStyles = {
+    emerald: {
+      iconBg: "bg-emerald-50",
+      iconText: "text-emerald-700",
+      badge: "bg-emerald-600",
+    },
+    rose: {
+      iconBg: "bg-rose-50",
+      iconText: "text-rose-700",
+      badge: "bg-rose-600",
+    },
+    violet: {
+      iconBg: "bg-violet-50",
+      iconText: "text-violet-700",
+      badge: "bg-violet-600",
+    },
+    amber: {
+      iconBg: "bg-amber-50",
+      iconText: "text-amber-700",
+      badge: "bg-amber-600",
+    },
+  };
+
   const getBadgeClasses = () => {
     if (badgeVariant === "success") {
       return "bg-emerald-600 text-white";
@@ -585,10 +697,11 @@ function CategoryCard({
     if (badgeVariant === "partial") {
       return "bg-amber-500 text-white";
     }
-    return "bg-emerald-600 text-white";
+    return `${colorStyles[color].badge} text-white`;
   };
 
   const showBadge = badge !== undefined && (typeof badge === "string" || badge > 0);
+  const styles = colorStyles[color];
 
   return (
     <Link
@@ -596,7 +709,7 @@ function CategoryCard({
       className="flex items-center justify-between rounded-[1.75rem] border border-[#e4e6eb] bg-white p-5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.06)] transition-all active:scale-[0.98]"
     >
       <div className="flex items-center gap-5">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${styles.iconBg} ${styles.iconText}`}>
           <span className="material-symbols-outlined text-[28px]">{icon}</span>
         </div>
         <div>

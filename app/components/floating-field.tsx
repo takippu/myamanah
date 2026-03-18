@@ -7,6 +7,7 @@ type FloatingFieldProps = {
   children: ReactNode;
   labelClassName?: string;
   backgroundClassName?: string;
+  hint?: string;
 };
 
 export function FloatingField({
@@ -14,6 +15,7 @@ export function FloatingField({
   children,
   labelClassName = "",
   backgroundClassName = "bg-white",
+  hint,
 }: FloatingFieldProps) {
   return (
     <div className="relative">
@@ -23,6 +25,9 @@ export function FloatingField({
         {label}
       </span>
       {children}
+      {hint && (
+        <p className="mt-1.5 px-1 text-[11px] text-slate-400">{hint}</p>
+      )}
     </div>
   );
 }
