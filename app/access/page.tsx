@@ -54,9 +54,12 @@ function AccessSetupPageContent() {
       // Check if user is authenticated via Google
       let authUser: { email: string; name?: string; image?: string } | null = null;
       try {
+        console.log("[Access] Checking auth...", { shouldRestore, localVaultExists });
         const authRes = await fetch("/api/auth/me", { credentials: "include" });
+        console.log("[Access] Auth response:", authRes.status, authRes.ok);
         if (authRes.ok) {
           const authData = await authRes.json() as { user?: { email?: string; name?: string; image?: string } };
+          console.log("[Access] Auth data:", authData);
           if (authData.user?.email) {
             authUser = {
               email: authData.user.email,
@@ -65,18 +68,22 @@ function AccessSetupPageContent() {
             };
           }
         }
-      } catch {
+      } catch (err) {
+        console.error("[Access] Auth check failed:", err);
         // Auth check failed, continue as unauthenticated
       }
 
       // If coming from login for restore, show unlock form
       if (shouldRestore && !localVaultExists) {
+        console.log("[Access] Restore mode, authUser:", authUser?.email || "none");
         if (!cancelled) {
           if (authUser) {
             setGoogleUser(authUser);
             setMode("google_unlock");
+            console.log("[Access] Set mode: google_unlock");
           } else {
             setMode("unlock");
+            console.log("[Access] Set mode: unlock (no auth user)");
           }
         }
         return;
