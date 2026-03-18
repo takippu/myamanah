@@ -38,6 +38,9 @@ function clamp(value: number, min: number, max: number): number {
 
 export default function VaultPage() {
   const [vault, setVault] = useState<VaultData | null>(null);
+  const [email, setEmail] = useState<string>("");
+  const [testEmailStatus, setTestEmailStatus] = useState<string | null>(null);
+  const [isSendingTest, setIsSendingTest] = useState(false);
   const [counts, setCounts] = useState({
     debts: 0,
     assets: 0,
@@ -66,6 +69,12 @@ export default function VaultPage() {
     try {
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       setCanManageReleaseChannels(authRes.ok);
+      if (authRes.ok) {
+        const authData = await authRes.json() as { user?: { email?: string } };
+        setEmail(authData.user?.email ?? "");
+      } else {
+        setEmail("");
+      }
       const vault = await loadVaultData();
       setVault(vault ?? emptyVaultData());
       if (authRes.ok) {
@@ -213,6 +222,32 @@ export default function VaultPage() {
     await refreshData();
   };
 
+  const sendTestEmail = async () => {
+    setIsSendingTest(true);
+    setTestEmailStatus(null);
+    try {
+      const response = await fetch("/api/trusted-contacts/test-email", {
+        method: "POST",
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to send test email");
+      }
+      
+      const result = await response.json();
+      setTestEmailStatus(`✓ ${result.message}`);
+    } catch (error) {
+      setTestEmailStatus(error instanceof Error ? error.message : "Failed to send test email");
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
+  // Check if current user is thaqifdevv@gmail.com for test button
+  const canSendTestEmail = email.toLowerCase() === "thaqifdevv@gmail.com";
+
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
@@ -308,15 +343,29 @@ export default function VaultPage() {
                     Trusted contacts still need your recovery key from you directly. MyAmanah never sends that key.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openTrustedForm()}
-                  disabled={showTrustedForm || (vault?.trustedContacts.length ?? 0) >= 3}
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 disabled:opacity-40"
-                >
-                  <span className="material-symbols-outlined">add</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {canSendTestEmail && (
+                    <button
+                      type="button"
+                      onClick={() => void sendTestEmail()}
+                      disabled={isSendingTest}
+                      className="flex h-11 items-center justify-center gap-1.5 rounded-2xl bg-amber-50 px-3 text-amber-700 disabled:opacity-40"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">send</span>
+                      <span className="text-xs font-semibold">Test</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openTrustedForm()}
+                    disabled={showTrustedForm || (vault?.trustedContacts.length ?? 0) >= 3}
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 disabled:opacity-40"
+                  >
+                    <span className="material-symbols-outlined">add</span>
+                  </button>
+                </div>
               </div>
+              {testEmailStatus ? <p className="mb-2 text-xs font-medium text-amber-700">{testEmailStatus}</p> : null}
               {trustedStatus ? <p className="mb-3 text-xs font-medium text-emerald-700">{trustedStatus}</p> : null}
               <div className="space-y-3">
                 {(vault?.trustedContacts.length ?? 0) > 0 ? (

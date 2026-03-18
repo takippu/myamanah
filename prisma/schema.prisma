@@ -43,6 +43,7 @@ enum ReleaseAuditEventType {
   release_email_ignored
   release_failed
   retrieval_token_created
+  test_email_sent
   retrieval_viewed
   retrieval_downloaded
   retrieval_accepted
