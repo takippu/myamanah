@@ -69,30 +69,32 @@ function SettingsPageContent() {
     void refreshData();
   }, []);
 
-  // Auto-sync after Google login (when returning from OAuth)
+  // Auto-sync or restore after Google login (when returning from OAuth)
   useEffect(() => {
-    const autoSyncAfterLogin = async () => {
-      // Check if user is authenticated and has local vault but backup not enabled
-      if (isAuthenticated && !backupEnabled && !backupBusy) {
-        // Check if local vault exists
-        const status = await getVaultStatus();
-        if (status?.updatedAt) {
-          // Has local vault, auto-enable backup
-          setBackupMessage("Syncing your vault to cloud...");
-          try {
-            await enableCloudBackup();
-            setBackupEnabled(true);
-            setBackupMessage("✓ Auto-synced! Your vault is now backed up to the cloud.");
-          } catch {
-            setBackupMessage("Could not auto-sync. Please click Enable Backup manually.");
-          }
+    const handlePostLogin = async () => {
+      if (!isAuthenticated || backupBusy) return;
+      
+      // Check if local vault exists
+      const status = await getVaultStatus();
+      const hasLocalVault = Boolean(status?.updatedAt);
+      
+      if (hasLocalVault && !backupEnabled) {
+        // Has local vault but backup not enabled - auto-enable backup
+        setBackupMessage("Syncing your vault to cloud...");
+        try {
+          await enableCloudBackup();
+          setBackupEnabled(true);
+          setBackupMessage("✓ Auto-synced! Your vault is now backed up to the cloud.");
+        } catch {
+          setBackupMessage("Could not auto-sync. Please click Enable Backup manually.");
         }
+      } else if (!hasLocalVault && backupEnabled) {
+        // No local vault but has cloud backup - redirect to restore
+        window.location.href = "/access?restore=1";
       }
     };
     
-    if (isAuthenticated && !backupEnabled && !backupBusy) {
-      void autoSyncAfterLogin();
-    }
+    void handlePostLogin();
   }, [isAuthenticated, backupEnabled, backupBusy]);
 
   // Refresh when page becomes visible

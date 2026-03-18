@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { generateRecoveryKey } from "@/lib/vault-crypto";
 import { clearVaultSecrets, getVaultSecrets, setVaultSecrets } from "@/lib/vault-session";
 import { authClient } from "@/lib/auth-client";
@@ -17,8 +17,10 @@ import {
   setCloudBackupEnabled,
 } from "@/lib/vault-client";
 
-export default function AccessSetupPage() {
+function AccessSetupPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const shouldRestore = searchParams.get("restore") === "1";
   const [mode, setMode] = useState<"checking" | "unlock" | "create">("checking");
   const [step, setStep] = useState<"passphrase" | "recovery" | "confirm" | "complete">("passphrase");
   const [passphrase, setPassphrase] = useState("");
@@ -46,6 +48,14 @@ export default function AccessSetupPage() {
 
       const localVaultExists = hasLocalVaultPayload();
       const existingSecrets = getVaultSecrets();
+
+      // If coming from login for restore, show unlock form
+      if (shouldRestore && !localVaultExists) {
+        if (!cancelled) {
+          setMode("unlock");
+        }
+        return;
+      }
 
       if (!localVaultExists) {
         // No local vault - this is a fresh start
@@ -87,7 +97,7 @@ export default function AccessSetupPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, shouldRestore]);
 
   const validatePassphrase = () => {
     if (passphrase.length < 12) {
@@ -663,5 +673,23 @@ export default function AccessSetupPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function AccessSetupSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#F2F2F7] flex items-center justify-center">
+      <div className="animate-pulse text-slate-400">Loading...</div>
+    </div>
+  );
+}
+
+// Wrapper with Suspense
+export default function AccessSetupPage() {
+  return (
+    <Suspense fallback={<AccessSetupSkeleton />}>
+      <AccessSetupPageContent />
+    </Suspense>
   );
 }
