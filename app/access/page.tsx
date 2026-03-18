@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Head from "next/head";
 import { generateRecoveryKey } from "@/lib/vault-crypto";
 import { clearVaultSecrets, getVaultSecrets, setVaultSecrets } from "@/lib/vault-session";
 import { authClient } from "@/lib/auth-client";
@@ -16,6 +17,43 @@ import {
   setLocalProfileName,
   setCloudBackupEnabled,
 } from "@/lib/vault-client";
+
+// Clear all caches to ensure fresh auth state
+function clearAllCaches() {
+  if (typeof window === "undefined") return;
+  
+  // Clear browser cache for this page
+  if ("caches" in window) {
+    void caches.keys().then((names) => {
+      names.forEach((name) => {
+        void caches.delete(name);
+      });
+    });
+  }
+  
+  // Clear session storage
+  sessionStorage.clear();
+  
+  console.log("[Access] Caches cleared");
+}
+
+// Force reload once if coming from OAuth redirect (to bypass mobile cache)
+function forceReloadIfFromOAuth() {
+  if (typeof window === "undefined") return false;
+  
+  const hasReloaded = sessionStorage.getItem("access_page_reloaded");
+  const urlParams = new URLSearchParams(window.location.search);
+  const isFromRedirect = urlParams.has("restore") || document.referrer.includes("google") || document.referrer.includes("accounts");
+  
+  if (!hasReloaded && isFromRedirect) {
+    console.log("[Access] Forcing reload to bypass mobile cache...");
+    sessionStorage.setItem("access_page_reloaded", "true");
+    window.location.reload();
+    return true;
+  }
+  
+  return false;
+}
 
 function AccessSetupPageContent() {
   const router = useRouter();
@@ -38,6 +76,17 @@ function AccessSetupPageContent() {
   // Google OAuth user info
   const [googleUser, setGoogleUser] = useState<{ email: string; name?: string; image?: string } | null>(null);
 
+  // Force reload once if from OAuth to bypass mobile cache
+  const [isReloading, setIsReloading] = useState(false);
+  
+  useEffect(() => {
+    if (forceReloadIfFromOAuth()) {
+      setIsReloading(true);
+      return;
+    }
+    clearAllCaches();
+  }, []);
+
   // Check session on mount - force sign out if no local vault exists
   useEffect(() => {
     let cancelled = false;
@@ -51,11 +100,19 @@ function AccessSetupPageContent() {
       const localVaultExists = hasLocalVaultPayload();
       const existingSecrets = getVaultSecrets();
 
-      // Check if user is authenticated via Google
+      // Check if user is authenticated via Google (with cache busting)
       let authUser: { email: string; name?: string; image?: string } | null = null;
       try {
         console.log("[Access] Checking auth...", { shouldRestore, localVaultExists });
-        const authRes = await fetch("/api/auth/me", { credentials: "include" });
+        // Add cache-busting timestamp to prevent cached responses
+        const cacheBuster = `?_cb=${Date.now()}`;
+        const authRes = await fetch(`/api/auth/me${cacheBuster}`, { 
+          credentials: "include",
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+          },
+        });
         console.log("[Access] Auth response:", authRes.status, authRes.ok);
         if (authRes.ok) {
           const authData = await authRes.json() as { user?: { email?: string; name?: string; image?: string } };
@@ -297,8 +354,15 @@ function AccessSetupPageContent() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
-      <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
+    <>
+      <Head>
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+      </Head>
+      <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-6">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-900 text-white">
@@ -326,7 +390,21 @@ function AccessSetupPageContent() {
             </div>
           )}
 
-          {mode === "checking" && (
+          {isReloading && (
+            <div className="flex h-[60vh] flex-col items-center justify-center text-center">
+              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-[2.5rem] bg-emerald-500 text-white shadow-xl shadow-emerald-500/30">
+                <span className="material-symbols-outlined animate-spin text-[48px]">progress_activity</span>
+              </div>
+              <h1 className="text-3xl font-light tracking-tight text-slate-900">
+                Refreshing<span className="font-semibold">...</span>
+              </h1>
+              <p className="mt-2 text-sm text-slate-500">
+                Clearing cache for latest updates.
+              </p>
+            </div>
+          )}
+
+          {mode === "checking" && !isReloading && (
             <div className="flex h-[60vh] flex-col items-center justify-center text-center">
               <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-[2.5rem] bg-emerald-500 text-white shadow-xl shadow-emerald-500/30">
                 <span className="material-symbols-outlined animate-spin text-[48px]">progress_activity</span>
@@ -853,6 +931,7 @@ function AccessSetupPageContent() {
         </main>
       </div>
     </div>
+    </>
   );
 }
 
