@@ -6,6 +6,7 @@ import type { TrustedContactReleaseChannel } from "@prisma/client";
 import { AppBottomNav } from "../components/app-bottom-nav";
 import { FloatingField } from "../components/floating-field";
 import { CategoryCardSkeleton } from "../components/skeletons";
+import { RecordListDrawer } from "../components/record-list-drawer";
 import { VaultSessionGuard } from "../components/vault-session-guard";
 import { emptyVaultData, type VaultData } from "@/lib/vault-data";
 import {
@@ -468,72 +469,87 @@ export default function VaultPage() {
                     <p className="mt-1 text-xs text-slate-400">Add someone who should receive your vault if the deadman switch triggers</p>
                   </div>
                 )}
-                {showTrustedForm ? (
-                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <FloatingField label="Name" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
-                      <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
-                        placeholder="e.g. Ahmad bin Abdullah"
-                        value={trustedForm.name}
-                        onChange={(event) => setTrustedForm((current) => ({ ...current, name: event.target.value }))}
-                      />
-                    </FloatingField>
-                    <FloatingField label="Relation" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
-                      <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
-                        placeholder="e.g. Brother, Wife, Son"
-                        value={trustedForm.relation}
-                        onChange={(event) => setTrustedForm((current) => ({ ...current, relation: event.target.value }))}
-                      />
-                    </FloatingField>
-                    <FloatingField 
-                      label="Preferred Contact Method" 
-                      labelClassName="text-emerald-700" 
-                      backgroundClassName="bg-slate-50"
-                      hint="How you'd normally reach them (for your reference only)"
+                {/* Trusted Contact Form Drawer */}
+                <RecordListDrawer
+                  open={showTrustedForm}
+                  title={editingTrustedId ? "Edit Trusted Contact" : "Add Trusted Contact"}
+                  onClose={() => { setShowTrustedForm(false); resetTrustedForm(); }}
+                  footer={
+                    <button
+                      type="button"
+                      className="w-full rounded-[1.3rem] bg-emerald-700 py-3 text-sm font-semibold tracking-wide text-white shadow-xl shadow-emerald-900/20 transition-all active:scale-[0.98]"
+                      onClick={() => void saveTrustedContact()}
+                      disabled={!trustedForm.name.trim() || !trustedForm.contact.trim()}
                     >
-                      <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
-                        placeholder="e.g. Call after 6pm, Telegram, office line"
-                        value={trustedForm.contact}
-                        onChange={(event) => setTrustedForm((current) => ({ ...current, contact: event.target.value }))}
-                      />
-                    </FloatingField>
-                    <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] leading-relaxed text-amber-900">
-                      <span className="font-semibold">Emergency delivery:</span> The release email below is used to send secure retrieval links if the deadman switch triggers. Phone is optional and only for manual follow-up.
-                    </div>
-                    <FloatingField label="Release Email" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
-                      <input
-                        type="email"
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
-                        placeholder="e.g. ahmad@email.com"
-                        value={trustedForm.releaseEmail}
-                        onChange={(event) => setTrustedForm((current) => ({ ...current, releaseEmail: event.target.value }))}
-                      />
-                    </FloatingField>
-                    <FloatingField label="Phone Number (Optional)" labelClassName="text-emerald-700" backgroundClassName="bg-slate-50">
-                      <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
-                        placeholder="e.g. +6012-345-6789"
-                        value={trustedForm.phoneNumber}
-                        onChange={(event) => setTrustedForm((current) => ({ ...current, phoneNumber: event.target.value }))}
-                      />
-                    </FloatingField>
-                    {!canManageReleaseChannels ? (
-                      <p className="text-[11px] leading-relaxed text-slate-500">
-                        Sign in and enable encrypted backup to save release email and phone for deadman delivery.
-                      </p>
-                    ) : null}
-                    <div className="flex items-center gap-3">
-                      <button type="button" className="flex-1 rounded-2xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white" onClick={() => void saveTrustedContact()}>
-                        {editingTrustedId ? "Update Contact" : "Save Contact"}
-                      </button>
-                      <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600" onClick={resetTrustedForm}>
-                        Cancel
-                      </button>
-                    </div>
+                      {editingTrustedId ? "Update Contact" : "Save Contact"}
+                    </button>
+                  }
+                >
+                  <div className="space-y-4 pt-2">
+                    <section className="rounded-[1.7rem] border border-slate-200 bg-white p-4 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.28)]">
+                      <div className="space-y-3">
+                        <FloatingField label="Name *" labelClassName="text-emerald-700">
+                          <input
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                            placeholder="e.g. Ahmad bin Abdullah"
+                            value={trustedForm.name}
+                            onChange={(event) => setTrustedForm((current) => ({ ...current, name: event.target.value }))}
+                          />
+                        </FloatingField>
+                        <FloatingField label="Relation" labelClassName="text-emerald-700">
+                          <input
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                            placeholder="e.g. Brother, Wife, Son"
+                            value={trustedForm.relation}
+                            onChange={(event) => setTrustedForm((current) => ({ ...current, relation: event.target.value }))}
+                          />
+                        </FloatingField>
+                        <FloatingField 
+                          label="Preferred Contact Method *" 
+                          labelClassName="text-emerald-700"
+                          hint="How you'd normally reach them (for your reference only)"
+                        >
+                          <input
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                            placeholder="e.g. Call after 6pm, Telegram, office line"
+                            value={trustedForm.contact}
+                            onChange={(event) => setTrustedForm((current) => ({ ...current, contact: event.target.value }))}
+                          />
+                        </FloatingField>
+                      </div>
+                    </section>
+
+                    <section className="rounded-[1.7rem] border border-slate-200 bg-white p-4 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.28)]">
+                      <div className="space-y-3">
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] leading-relaxed text-amber-900">
+                          <span className="font-semibold">Emergency delivery:</span> The release email below is used to send secure retrieval links if the deadman switch triggers. Phone is optional and only for manual follow-up.
+                        </div>
+                        <FloatingField label="Release Email" labelClassName="text-emerald-700">
+                          <input
+                            type="email"
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                            placeholder="e.g. ahmad@email.com"
+                            value={trustedForm.releaseEmail}
+                            onChange={(event) => setTrustedForm((current) => ({ ...current, releaseEmail: event.target.value }))}
+                          />
+                        </FloatingField>
+                        <FloatingField label="Phone Number (Optional)" labelClassName="text-emerald-700">
+                          <input
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none focus:border-emerald-500"
+                            placeholder="e.g. +6012-345-6789"
+                            value={trustedForm.phoneNumber}
+                            onChange={(event) => setTrustedForm((current) => ({ ...current, phoneNumber: event.target.value }))}
+                          />
+                        </FloatingField>
+                        {!canManageReleaseChannels ? (
+                          <p className="text-[11px] leading-relaxed text-slate-500">
+                            Sign in and enable encrypted backup to save release email and phone for deadman delivery.
+                          </p>
+                        ) : null}
+                      </div>
+                    </section>
                   </div>
-                ) : null}
+                </RecordListDrawer>
               </div>
             </div>
 

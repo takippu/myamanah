@@ -252,12 +252,7 @@ export default function AssetsPage() {
             <span className="material-symbols-outlined text-slate-600">arrow_back</span>
           </Link>
           <h1 className="text-sm font-semibold uppercase tracking-[0.15em] text-slate-600">Asset Records</h1>
-          <button
-            type="button"
-            className="glass-card flex h-12 w-12 items-center justify-center rounded-2xl transition-transform active:scale-95"
-          >
-            <span className="material-symbols-outlined text-slate-600">more_vert</span>
-          </button>
+          <div className="h-12 w-12" />
         </header>
 
         {/* Hero Card */}
