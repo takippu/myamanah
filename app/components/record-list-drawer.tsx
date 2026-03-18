@@ -65,9 +65,9 @@ export function RecordListDrawer({ open, title, onClose, children, footer }: Rec
         <div className="px-6 pb-4">
           <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-slate-500">{title}</h2>
         </div>
-        <div className="max-h-[65vh] overflow-y-auto px-6 pb-6 pt-2">{children}</div>
+        <div className="max-h-[75vh] overflow-y-auto px-6 pb-32 pt-2">{children}</div>
         {footer ? (
-          <div className="sticky bottom-0 rounded-t-[1.5rem] border-t border-slate-200 bg-white/95 px-6 pb-6 pt-4 backdrop-blur">
+          <div className="absolute bottom-0 left-0 right-0 rounded-t-[1.5rem] border-t border-slate-200 bg-white/95 px-6 pb-8 pt-4 backdrop-blur">
             {footer}
           </div>
         ) : null}
