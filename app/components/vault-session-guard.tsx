@@ -13,12 +13,33 @@ export function VaultSessionGuard() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const previousBodyPaddingTop = document.body.style.paddingTop;
     const hasLocalVault = hasLocalVaultPayload();
 
     if (!hasSecrets && hasLocalVault) {
       router.replace("/access");
       return;
+    }
+
+    // Check if user has Google auth but no vault - redirect with restore param
+    if (!hasSecrets && !hasLocalVault) {
+      const checkAuth = async () => {
+        try {
+          const authRes = await fetch("/api/auth/me", { credentials: "include" });
+          if (authRes.ok) {
+            const authData = await authRes.json() as { user?: { email?: string } };
+            if (authData.user?.email && !cancelled) {
+              // User is Google-authenticated but needs to unlock vault
+              router.replace("/access?restore=1");
+              return;
+            }
+          }
+        } catch {
+          // Auth check failed, continue normal flow
+        }
+      };
+      void checkAuth();
     }
 
     if (!hasSecrets) {
@@ -37,6 +58,7 @@ export function VaultSessionGuard() {
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
+      cancelled = true;
       document.body.style.paddingTop = previousBodyPaddingTop;
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
