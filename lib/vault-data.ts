@@ -3,6 +3,37 @@ export type VaultContact = {
   method: string;
 };
 
+// Transaction types for tracking payments and adjustments
+export type DebtTransaction = {
+  id: string;
+  date: string;
+  amount: number;
+  type: 'payment' | 'increase';
+  notes?: string;
+  balanceAfter: number;
+  createdAt: string;
+};
+
+export type AssetTransaction = {
+  id: string;
+  date: string;
+  amount: number;
+  type: 'appreciation' | 'depreciation' | 'adjustment';
+  notes?: string;
+  valueAfter: number;
+  createdAt: string;
+};
+
+export type DebtorTransaction = {
+  id: string;
+  date: string;
+  amount: number;
+  type: 'payment' | 'additional_loan';
+  notes?: string;
+  balanceAfter: number;
+  createdAt: string;
+};
+
 export type AssetRecord = {
   id: string;
   assetType: string;
@@ -13,6 +44,10 @@ export type AssetRecord = {
   contactMethod?: string;
   notes?: string;
   value?: string;
+  valueNumber?: number;
+  transactions?: AssetTransaction[];
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type DebtRecord = {
@@ -20,10 +55,31 @@ export type DebtRecord = {
   debtType: string;
   creditor: string;
   amount?: string;
+  amountNumber?: number;
+  remainingAmount?: number;
   dueDate?: string;
   whereDocs: string;
   contacts?: VaultContact[];
   notes?: string;
+  transactions?: DebtTransaction[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+// New: Debtor type for tracking money owed TO the user
+export type Debtor = {
+  id: string;
+  name: string;
+  originalAmount: number;
+  remainingAmount: number;
+  dateLent: string;
+  dueDate?: string;
+  contact?: string;
+  notes?: string;
+  status: 'pending' | 'paid';
+  transactions: DebtorTransaction[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type WishesRecord = {
@@ -53,6 +109,7 @@ export type ChecklistState = {
 export type VaultData = {
   assets: AssetRecord[];
   debts: DebtRecord[];
+  debtors?: Debtor[];
   digitalLegacy: DigitalLegacyRecord[];
   wishes: WishesRecord;
   checklist: ChecklistState;
@@ -69,6 +126,7 @@ export function emptyVaultData(): VaultData {
   return {
     assets: [],
     debts: [],
+    debtors: [],
     digitalLegacy: [],
     wishes: {
       religiousWishes: "",

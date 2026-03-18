@@ -8,20 +8,20 @@ import { BalanceAdjustModal } from "../../components/balance-adjust-modal";
 import { HeroSkeleton } from "../../components/skeletons";
 import { TransactionList } from "../../components/transaction-list";
 import { VaultSessionGuard } from "../../components/vault-session-guard";
-import { emptyVaultData, type DebtRecord, type DebtTransaction } from "@/lib/vault-data";
+import { emptyVaultData, type Debtor, type DebtorTransaction } from "@/lib/vault-data";
 import { loadVaultData, saveVaultData } from "@/lib/vault-client";
 
-export default function DebtRecordDetailPage() {
+export default function DebtorDetailPage() {
   const params = useParams<{ id: string }>();
-  const [record, setRecord] = useState<DebtRecord | null>(null);
+  const [debtor, setDebtor] = useState<Debtor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
 
   const refreshData = async () => {
     try {
       const vault = await loadVaultData();
-      const nextRecord = vault?.debts.find((item) => item.id === params.id) ?? null;
-      setRecord(nextRecord);
+      const nextDebtor = vault?.debtors?.find((item) => item.id === params.id) ?? null;
+      setDebtor(nextDebtor);
     } finally {
       setIsLoading(false);
     }
@@ -32,73 +32,72 @@ export default function DebtRecordDetailPage() {
   }, [params.id]);
 
   const handleAdjustBalance = async (amount: number, notes?: string, date?: string) => {
-    if (!record) return;
+    if (!debtor) return;
 
-    const currentBalance = record.remainingAmount || record.amountNumber || 0;
-    const newBalance = currentBalance + amount;
+    const currentBalance = debtor.remainingAmount || 0;
+    const newBalance = currentBalance - amount; // For debtors: positive amount = payment received (reduces balance)
 
-    const transaction: DebtTransaction = {
+    const transaction: DebtorTransaction = {
       id: crypto.randomUUID(),
       date: date || new Date().toISOString().split("T")[0],
-      amount,
-      type: amount > 0 ? "increase" : "payment",
+      amount: amount > 0 ? amount : -amount,
+      type: amount > 0 ? "payment" : "additional_loan",
       notes,
       balanceAfter: newBalance,
       createdAt: new Date().toISOString(),
     };
 
-    const updatedRecord: DebtRecord = {
-      ...record,
+    const updatedDebtor: Debtor = {
+      ...debtor,
       remainingAmount: newBalance,
-      transactions: [...(record.transactions || []), transaction],
+      status: newBalance <= 0 ? "paid" : "pending",
+      transactions: [...(debtor.transactions || []), transaction],
       updatedAt: new Date().toISOString(),
     };
 
-    // Update local state
-    setRecord(updatedRecord);
+    setDebtor(updatedDebtor);
 
-    // Save to vault
     try {
       const vault = await loadVaultData();
-      const updatedDebts = vault?.debts.map((d) => (d.id === record.id ? updatedRecord : d)) || [];
-      await saveVaultData({ ...(vault || emptyVaultData()), debts: updatedDebts });
+      const updatedDebtors = vault?.debtors?.map((d) => (d.id === debtor.id ? updatedDebtor : d)) || [];
+      await saveVaultData({ ...(vault || emptyVaultData()), debtors: updatedDebtors });
     } catch (error) {
       console.error("Failed to save transaction:", error);
     }
   };
 
   const handleDeleteTransaction = async (transactionId: string) => {
-    if (!record || !record.transactions) return;
+    if (!debtor || !debtor.transactions) return;
 
-    const updatedTransactions = record.transactions.filter((t) => t.id !== transactionId);
+    const updatedTransactions = debtor.transactions.filter((t) => t.id !== transactionId);
     
     // Recalculate remaining amount from original
-    const originalAmount = record.amountNumber || 0;
     const newRemainingAmount = updatedTransactions.reduce(
-      (balance, t) => balance + t.amount,
-      originalAmount
+      (balance, t) => balance - (t.type === "payment" ? t.amount : -t.amount),
+      debtor.originalAmount
     );
 
-    const updatedRecord: DebtRecord = {
-      ...record,
+    const updatedDebtor: Debtor = {
+      ...debtor,
       remainingAmount: newRemainingAmount,
+      status: newRemainingAmount <= 0 ? "paid" : "pending",
       transactions: updatedTransactions,
       updatedAt: new Date().toISOString(),
     };
 
-    setRecord(updatedRecord);
+    setDebtor(updatedDebtor);
 
     try {
       const vault = await loadVaultData();
-      const updatedDebts = vault?.debts.map((d) => (d.id === record.id ? updatedRecord : d)) || [];
-      await saveVaultData({ ...(vault || emptyVaultData()), debts: updatedDebts });
+      const updatedDebtors = vault?.debtors?.map((d) => (d.id === debtor.id ? updatedDebtor : d)) || [];
+      await saveVaultData({ ...(vault || emptyVaultData()), debtors: updatedDebtors });
     } catch (error) {
       console.error("Failed to delete transaction:", error);
     }
   };
 
-  const remainingAmount = record?.remainingAmount || record?.amountNumber || 0;
-  const originalAmount = record?.amountNumber || 0;
+  const remainingAmount = debtor?.remainingAmount || 0;
+  const originalAmount = debtor?.originalAmount || 0;
   const progress = originalAmount > 0 ? ((originalAmount - remainingAmount) / originalAmount) * 100 : 0;
 
   return (
@@ -113,30 +112,38 @@ export default function DebtRecordDetailPage() {
           >
             <span className="material-symbols-outlined text-slate-600">arrow_back</span>
           </Link>
-          <h1 className="text-sm font-semibold uppercase tracking-[0.15em] text-slate-600">Debt Detail</h1>
+          <h1 className="text-sm font-semibold uppercase tracking-[0.15em] text-slate-600">Debtor Detail</h1>
           <div className="h-12 w-12" />
         </header>
 
         <main className="flex-1 space-y-4 px-6 pb-36 pt-4">
           {isLoading ? <HeroSkeleton /> : null}
 
-          {!isLoading && !record ? (
+          {!isLoading && !debtor ? (
             <div className="glass-card rounded-3xl border border-[#e7eaee] bg-white/85 p-6 text-center">
-              <p className="text-sm font-semibold text-slate-700">Debt not found</p>
+              <p className="text-sm font-semibold text-slate-700">Debtor not found</p>
               <p className="mt-1 text-xs text-slate-500">This record is no longer available on this device.</p>
             </div>
           ) : null}
 
-          {record ? (
+          {debtor ? (
             <>
               {/* Main Info Card */}
               <section className="glass-card rounded-[2rem] border border-[#e7eaee] bg-white/90 p-6 shadow-[0_16px_30px_-18px_rgba(15,23,42,0.25)]">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{record.debtType}</p>
-                    <h2 className="mt-1 text-2xl font-bold text-slate-900">{record.creditor}</h2>
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        debtor.status === "paid" 
+                          ? "bg-emerald-100 text-emerald-700" 
+                          : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {debtor.status}
+                      </span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900">{debtor.name}</h2>
                   </div>
-                  <div className="rounded-2xl bg-rose-50 px-4 py-3 text-right text-rose-700">
+                  <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-right text-emerald-700">
                     <p className="text-[10px] font-bold uppercase tracking-widest">Remaining</p>
                     <p className="mt-1 text-sm font-semibold">RM {remainingAmount.toLocaleString()}</p>
                   </div>
@@ -146,8 +153,8 @@ export default function DebtRecordDetailPage() {
                 {originalAmount > 0 && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-slate-500">Progress</span>
-                      <span className="font-medium text-emerald-600">{progress.toFixed(0)}% paid</span>
+                      <span className="text-slate-500">Repaid</span>
+                      <span className="font-medium text-emerald-600">{progress.toFixed(0)}%</span>
                     </div>
                     <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
                       <div
@@ -165,49 +172,43 @@ export default function DebtRecordDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowAdjustModal(true)}
-                  className="mt-4 w-full rounded-2xl bg-rose-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700 active:scale-[0.98]"
+                  className="mt-4 w-full rounded-2xl bg-emerald-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 active:scale-[0.98]"
                 >
                   <span className="material-symbols-outlined mr-1 align-text-bottom text-[18px]">payments</span>
                   Record Payment / Adjustment
                 </button>
 
                 <div className="mt-6 space-y-4">
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Debt Docs Where</p>
-                    <p className="mt-2 text-sm text-slate-800">{record.whereDocs}</p>
-                  </div>
+                  {debtor.contact && (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Contact</p>
+                      <p className="mt-2 text-sm text-slate-800">{debtor.contact}</p>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Due Date</p>
-                      <p className="mt-2 text-sm text-slate-800">{record.dueDate || "Not set"}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Date Lent</p>
+                      <p className="mt-2 text-sm text-slate-800">
+                        {new Date(debtor.dateLent).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
                     </div>
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Contacts</p>
-                      <p className="mt-2 text-sm text-slate-800">{record.contacts?.length ? `${record.contacts.length} saved` : "None"}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Due Date</p>
+                      <p className="mt-2 text-sm text-slate-800">
+                        {debtor.dueDate 
+                          ? new Date(debtor.dueDate).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })
+                          : "Not set"}
+                      </p>
                     </div>
                   </div>
 
-                  {record.contacts && record.contacts.length > 0 ? (
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Contact Details</p>
-                      <div className="mt-3 space-y-3">
-                        {record.contacts.map((contact, index) => (
-                          <div key={`${contact.name}-${index}`} className="grid grid-cols-2 gap-3 text-sm text-slate-800">
-                            <p>{contact.name || "Not set"}</p>
-                            <p>{contact.method || "Not set"}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {record.notes ? (
+                  {debtor.notes && (
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Notes</p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{record.notes}</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{debtor.notes}</p>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               </section>
 
@@ -216,13 +217,13 @@ export default function DebtRecordDetailPage() {
                 <div className="mb-4 flex items-center justify-between">
                   <h3 className="text-sm font-bold uppercase tracking-widest text-slate-500">Payment History</h3>
                   <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                    {record.transactions?.length || 0} records
+                    {debtor.transactions?.length || 0} records
                   </span>
                 </div>
                 <TransactionList
-                  transactions={record.transactions || []}
+                  transactions={debtor.transactions || []}
                   onDelete={handleDeleteTransaction}
-                  type="debt"
+                  type="debtor"
                 />
               </section>
             </>
@@ -234,7 +235,7 @@ export default function DebtRecordDetailPage() {
           onClose={() => setShowAdjustModal(false)}
           currentBalance={remainingAmount}
           onSave={handleAdjustBalance}
-          type="debt"
+          type="debtor"
         />
 
         <AppBottomNav active="assets" mode="dashboard" />
