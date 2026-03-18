@@ -64,6 +64,22 @@ export default function VaultPage() {
     releaseEmail: "",
     phoneNumber: "",
   });
+  // Notify dialog state
+  const [notifyDialog, setNotifyDialog] = useState<{
+    isOpen: boolean;
+    contactId: string | null;
+    contactName: string;
+    contactEmail: string;
+    isSending: boolean;
+    status: string | null;
+  }>({
+    isOpen: false,
+    contactId: null,
+    contactName: "",
+    contactEmail: "",
+    isSending: false,
+    status: null,
+  });
 
   const refreshData = async () => {
     try {
@@ -248,6 +264,62 @@ export default function VaultPage() {
   // Check if current user is thaqifdevv@gmail.com for test button
   const canSendTestEmail = email.toLowerCase() === "thaqifdevv@gmail.com";
 
+  const openNotifyDialog = (contactId: string, name: string, email: string) => {
+    setNotifyDialog({
+      isOpen: true,
+      contactId,
+      contactName: name,
+      contactEmail: email,
+      isSending: false,
+      status: null,
+    });
+  };
+
+  const closeNotifyDialog = () => {
+    setNotifyDialog((prev) => ({ ...prev, isOpen: false, status: null }));
+  };
+
+  const sendNotification = async () => {
+    if (!notifyDialog.contactId || !notifyDialog.contactEmail) return;
+    
+    setNotifyDialog((prev) => ({ ...prev, isSending: true, status: null }));
+    
+    try {
+      const response = await fetch("/api/trusted-contacts/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          contactId: notifyDialog.contactId,
+          email: notifyDialog.contactEmail,
+          name: notifyDialog.contactName,
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to send notification");
+      }
+      
+      setNotifyDialog((prev) => ({
+        ...prev,
+        isSending: false,
+        status: `✓ Notification sent to ${notifyDialog.contactEmail}`,
+      }));
+      
+      // Close dialog after a delay
+      setTimeout(() => {
+        closeNotifyDialog();
+      }, 2000);
+    } catch (error) {
+      setNotifyDialog((prev) => ({
+        ...prev,
+        isSending: false,
+        status: error instanceof Error ? error.message : "Failed to send notification",
+      }));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
@@ -370,15 +442,23 @@ export default function VaultPage() {
               {trustedStatus ? <p className="mb-3 text-xs font-medium text-emerald-700">{trustedStatus}</p> : null}
               <div className="space-y-3">
                 {(vault?.trustedContacts.length ?? 0) > 0 ? (
-                  vault?.trustedContacts.map((contact) => (
-                    <TrustedContactCard
-                      key={contact.id}
-                      contact={contact}
-                      releaseChannel={releaseChannels[contact.id]}
-                      onEdit={() => openTrustedForm(contact)}
-                      onDelete={() => void deleteTrustedContact(contact.id)}
-                    />
-                  ))
+                  vault?.trustedContacts.map((contact) => {
+                    const channel = releaseChannels[contact.id];
+                    const hasReleaseEmail = !!channel?.releaseEmail;
+                    return (
+                      <TrustedContactCard
+                        key={contact.id}
+                        contact={contact}
+                        releaseChannel={channel}
+                        onEdit={() => openTrustedForm(contact)}
+                        onDelete={() => void deleteTrustedContact(contact.id)}
+                        canNotify={hasReleaseEmail && canManageReleaseChannels}
+                        onNotify={hasReleaseEmail && canManageReleaseChannels ? () => {
+                          openNotifyDialog(contact.id, contact.name, channel!.releaseEmail);
+                        } : undefined}
+                      />
+                    );
+                  })
                 ) : (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
                     <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
@@ -551,6 +631,81 @@ export default function VaultPage() {
             </div>
           </div>
         ) : null}
+
+        {/* Notify Contact Confirmation Dialog */}
+        {notifyDialog.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 px-4 pb-6 pt-12 sm:items-center sm:justify-center">
+            <div className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.45)]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                  <span className="material-symbols-outlined text-[24px]">notifications_active</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Notify Trusted Contact</h2>
+                  <p className="text-xs text-slate-500">Send a courtesy notification email</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Recipient</p>
+                  <p className="text-sm font-medium text-slate-900">{notifyDialog.contactName}</p>
+                  <p className="text-xs text-slate-600">{notifyDialog.contactEmail}</p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-amber-600 text-[20px]">info</span>
+                    <div>
+                      <p className="text-sm font-medium text-amber-900">What will happen?</p>
+                      <p className="mt-1 text-xs text-amber-800/80 leading-relaxed">
+                        An email will be sent to <strong>{notifyDialog.contactEmail}</strong> notifying them that they have been added as a trusted contact on <strong>amanah.trlabs.my</strong> (MyAmanah).
+                      </p>
+                      <p className="mt-2 text-xs text-amber-800/80 leading-relaxed">
+                        The email explains what MyAmanah is, what being a trusted contact means, and that they will only receive emails if you miss your deadman switch check-in.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {notifyDialog.status && (
+                  <div className={`rounded-2xl px-4 py-3 text-sm ${notifyDialog.status.startsWith("✓") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                    {notifyDialog.status}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void sendNotification()}
+                  disabled={notifyDialog.isSending || !!notifyDialog.status?.startsWith("✓")}
+                  className="flex-1 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {notifyDialog.isSending ? (
+                    <>
+                      <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[18px]">send</span>
+                      Send Notification
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeNotifyDialog}
+                  disabled={notifyDialog.isSending}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -561,11 +716,15 @@ function TrustedContactCard({
   releaseChannel,
   onEdit,
   onDelete,
+  onNotify,
+  canNotify,
 }: {
   contact: { id: string; name: string; relation?: string; contact?: string };
   releaseChannel?: TrustedContactReleaseChannel;
   onEdit: () => void;
   onDelete: () => void;
+  onNotify?: () => void;
+  canNotify?: boolean;
 }) {
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-sm transition-all hover:shadow-md">
@@ -595,6 +754,16 @@ function TrustedContactCard({
           
           {/* Right: Actions */}
           <div className="flex items-center gap-1.5">
+            {canNotify && onNotify && (
+              <button 
+                type="button" 
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-600 transition-colors hover:bg-sky-50 hover:text-sky-700" 
+                onClick={onNotify}
+                title="Notify contact"
+              >
+                <span className="material-symbols-outlined text-[18px]">notifications_active</span>
+              </button>
+            )}
             <button 
               type="button" 
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700" 

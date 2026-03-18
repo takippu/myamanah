@@ -21,7 +21,7 @@ function AccessSetupPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const shouldRestore = searchParams.get("restore") === "1";
-  const [mode, setMode] = useState<"checking" | "unlock" | "create">("checking");
+  const [mode, setMode] = useState<"checking" | "unlock" | "create" | "google_unlock">("checking");
   const [step, setStep] = useState<"passphrase" | "recovery" | "confirm" | "complete">("passphrase");
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
@@ -35,6 +35,8 @@ function AccessSetupPageContent() {
   const [showRecovery, setShowRecovery] = useState(false);
   const [fullName, setFullName] = useState("");
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied">("idle");
+  // Google OAuth user info
+  const [googleUser, setGoogleUser] = useState<{ email: string; name?: string; image?: string } | null>(null);
 
   // Check session on mount - force sign out if no local vault exists
   useEffect(() => {
@@ -49,10 +51,42 @@ function AccessSetupPageContent() {
       const localVaultExists = hasLocalVaultPayload();
       const existingSecrets = getVaultSecrets();
 
+      // Check if user is authenticated via Google
+      let authUser: { email: string; name?: string; image?: string } | null = null;
+      try {
+        const authRes = await fetch("/api/auth/me", { credentials: "include" });
+        if (authRes.ok) {
+          const authData = await authRes.json() as { user?: { email?: string; name?: string; image?: string } };
+          if (authData.user?.email) {
+            authUser = {
+              email: authData.user.email,
+              name: authData.user.name,
+              image: authData.user.image,
+            };
+          }
+        }
+      } catch {
+        // Auth check failed, continue as unauthenticated
+      }
+
       // If coming from login for restore, show unlock form
       if (shouldRestore && !localVaultExists) {
         if (!cancelled) {
-          setMode("unlock");
+          if (authUser) {
+            setGoogleUser(authUser);
+            setMode("google_unlock");
+          } else {
+            setMode("unlock");
+          }
+        }
+        return;
+      }
+
+      // If authenticated via Google but no local vault, show Google unlock mode
+      if (authUser && !localVaultExists) {
+        if (!cancelled) {
+          setGoogleUser(authUser);
+          setMode("google_unlock");
         }
         return;
       }
@@ -405,6 +439,145 @@ function AccessSetupPageContent() {
               </div>
 
               {existingAccountPrompt}
+            </div>
+          )}
+
+          {/* Google OAuth Unlock Mode - Different UI for users coming from Google sign-in */}
+          {mode === "google_unlock" && googleUser && (
+            <div className="space-y-6">
+              {/* Google user indicator */}
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-100 text-blue-600">
+                  {googleUser.image ? (
+                    <img 
+                      src={googleUser.image} 
+                      alt="" 
+                      className="h-20 w-20 rounded-3xl object-cover"
+                    />
+                  ) : (
+                    <span className="material-symbols-outlined text-[40px]">account_circle</span>
+                  )}
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5">
+                  <span className="material-symbols-outlined text-[16px] text-blue-600">check_circle</span>
+                  <span className="text-xs font-medium text-blue-700">Signed in with Google</span>
+                </div>
+                <h1 className="mt-4 text-2xl font-light tracking-tight text-slate-900">
+                  Welcome back, <span className="font-semibold">{googleUser.name || googleUser.email}</span>
+                </h1>
+                <p className="mt-2 max-w-sm text-sm text-slate-500">
+                  You&apos;re authenticated as <strong>{googleUser.email}</strong>. Now unlock your vault to access your data.
+                </p>
+              </div>
+
+              {/* Info box */}
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/70 px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-blue-600">info</span>
+                  <div className="text-xs text-blue-800">
+                    <p className="font-semibold">Two layers of security</p>
+                    <p className="mt-1">
+                      Google sign-in proves your identity, but your vault is encrypted with keys only you know. 
+                      We never store your passphrase or recovery key on our servers.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Vault Passphrase <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type={showPassphrase ? "text" : "password"}
+                    value={unlockPassphrase}
+                    onChange={(e) => setUnlockPassphrase(e.target.value)}
+                    placeholder="Enter your vault passphrase"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Recovery Key <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showRecovery ? "text" : "password"}
+                      value={unlockRecoveryKey}
+                      onChange={(e) => setUnlockRecoveryKey(e.target.value)}
+                      placeholder="Enter your recovery key"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRecovery(!showRecovery)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    >
+                      <span className="material-symbols-outlined">
+                        {showRecovery ? "visibility_off" : "visibility"}
+                      </span>
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    This was shown when you first created your vault.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleUnlock}
+                disabled={isLoading || !unlockPassphrase || !unlockRecoveryKey}
+                className="flex w-full items-center justify-center gap-3 rounded-[2rem] bg-gradient-to-r from-blue-600 to-emerald-700 py-5 text-sm font-semibold tracking-wide text-white shadow-xl shadow-blue-900/20 transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined">lock_open</span>
+                {isLoading ? "Unlocking Vault..." : "Unlock My Vault"}
+              </button>
+
+              {/* Cloud restore hint */}
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-emerald-600">cloud_done</span>
+                  <div className="text-xs text-emerald-800">
+                    <p className="font-semibold">Cloud backup available</p>
+                    <p className="mt-1">
+                      If you enabled encrypted cloud backup, your vault will be restored automatically after unlocking.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-center text-xs font-medium text-slate-500">
+                  Not {googleUser.email}?
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await authClient.signOut();
+                    setMode("unlock");
+                    setGoogleUser(null);
+                  }}
+                  className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-500 hover:text-slate-900"
+                >
+                  Sign Out and Use Different Account
+                </button>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-center text-xs text-slate-400">
+                  Lost your keys? Your data cannot be recovered.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCreateNewVault}
+                  className="mt-2 w-full rounded-2xl border border-dashed border-rose-300 px-4 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-rose-600 transition-colors hover:border-rose-500 hover:text-rose-700"
+                >
+                  Create New Vault (Data Will Be Lost)
+                </button>
+              </div>
             </div>
           )}
 
