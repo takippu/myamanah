@@ -11,7 +11,10 @@
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:push": "prisma db push"
+    "prisma:push": "prisma db push",
+    "prisma:studio": "prisma studio",
+    "db:reset": "node scripts/db-reset.js",
+    "db:seed": "echo 'Seed not implemented. Create prisma/seed.ts first'"
   },
   "dependencies": {
     "@fontsource/material-symbols-outlined": "^5.2.35",
