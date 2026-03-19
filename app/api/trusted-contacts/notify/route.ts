@@ -8,9 +8,13 @@ function appBaseUrl(): string {
   return process.env.BETTER_AUTH_URL || "http://localhost:3000";
 }
 
+const RATE_LIMIT_HOURS = 5;
+const RATE_LIMIT_MS = RATE_LIMIT_HOURS * 60 * 60 * 1000;
+
 /**
  * POST /api/trusted-contacts/notify
  * Send a notification email to a specific trusted contact
+ * Rate limited: once per 5 hours per trusted contact
  */
 export async function POST(req: Request) {
   const user = await getAuthUserFromRequest();
@@ -29,6 +33,40 @@ export async function POST(req: Request) {
   }
 
   try {
+    // Check rate limit - get most recent notification to this contact
+    const recentNotification = await prisma.releaseAuditEvent.findFirst({
+      where: {
+        userId: user.id,
+        trustedContactId: contactId,
+        type: "test_email_sent",
+      },
+      orderBy: {
+        occurredAt: "desc",
+      },
+    });
+
+    if (recentNotification) {
+      const lastSent = new Date(recentNotification.occurredAt).getTime();
+      const now = Date.now();
+      const timeSince = now - lastSent;
+
+      if (timeSince < RATE_LIMIT_MS) {
+        const hoursRemaining = Math.ceil((RATE_LIMIT_MS - timeSince) / (60 * 60 * 1000));
+        const minutesRemaining = Math.ceil((RATE_LIMIT_MS - timeSince) / (60 * 1000));
+        
+        return NextResponse.json(
+          { 
+            error: `Please wait before sending another notification.`,
+            rateLimit: {
+              hoursRemaining,
+              minutesRemaining,
+              lastSentAt: recentNotification.occurredAt,
+            }
+          },
+          { status: 429 }
+        );
+      }
+    }
     const loginUrl = `${appBaseUrl()}/login`;
     
     await sendResendEmail({

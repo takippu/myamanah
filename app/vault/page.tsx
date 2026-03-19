@@ -207,20 +207,28 @@ export default function VaultPage() {
       ...vault,
       trustedContacts: nextContacts,
     });
-    if (trustedForm.releaseEmail.trim()) {
-      if (!canManageReleaseChannels) {
-        setTrustedStatus("Trusted contact saved locally. Sign in and enable encrypted backup to store release email and phone for emergency delivery.");
-      } else {
+    
+    // Only try to save release channels if user is authenticated
+    if (canManageReleaseChannels) {
+      if (trustedForm.releaseEmail.trim()) {
         await saveTrustedContactReleaseChannel({
           trustedContactId,
           releaseEmail: trustedForm.releaseEmail.trim(),
           phoneNumber: trustedForm.phoneNumber.trim() || null,
         });
+      } else if (editingTrustedId && releaseChannels[editingTrustedId]) {
+        await deleteTrustedContactReleaseChannel(editingTrustedId).catch(() => undefined);
       }
-    } else if (editingTrustedId && canManageReleaseChannels && releaseChannels[editingTrustedId]) {
-      await deleteTrustedContactReleaseChannel(editingTrustedId).catch(() => undefined);
+      setTrustedStatus(editingTrustedId ? "Trusted contact updated." : "Trusted contact added.");
+    } else {
+      // In local mode, show appropriate message if user tried to set release email
+      if (trustedForm.releaseEmail.trim()) {
+        setTrustedStatus("Trusted contact saved locally. Sign in and enable encrypted backup to store release email and phone for emergency delivery.");
+      } else {
+        setTrustedStatus(editingTrustedId ? "Trusted contact updated." : "Trusted contact added.");
+      }
     }
-    setTrustedStatus(editingTrustedId ? "Trusted contact updated." : "Trusted contact added.");
+    
     resetTrustedForm();
     await refreshData();
   };
@@ -301,6 +309,16 @@ export default function VaultPage() {
       
       if (!response.ok) {
         const error = await response.json();
+        
+        // Handle rate limit (429) response
+        if (response.status === 429 && error.rateLimit) {
+          const { minutesRemaining } = error.rateLimit;
+          const timeText = minutesRemaining >= 60 
+            ? `${Math.ceil(minutesRemaining / 60)} hours` 
+            : `${minutesRemaining} minutes`;
+          throw new Error(`Rate limited: Please wait ${timeText} before sending another notification.`);
+        }
+        
         throw new Error(error.error || "Failed to send notification");
       }
       

@@ -1,28 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-
+import { hasLocalVaultPayload } from "@/lib/vault-client";
 
 export default function LoginPage() {
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(true);
+
+  // Check if user already has a local vault
+  useEffect(() => {
+    const checkLocalVault = () => {
+      const hasLocal = hasLocalVaultPayload();
+      if (hasLocal) {
+        // User has local vault, they should unlock it instead of signing in
+        router.replace("/access");
+      }
+      setIsChecking(false);
+    };
+    checkLocalVault();
+  }, [router]);
 
   const continueWithGoogle = async () => {
     setGoogleLoading(true);
     setMessage(null);
     try {
+      // Sign in with Google, then go to access page which will check 
+      // if they have a cloud backup to restore or need to create new vault
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/settings",
+        callbackURL: "/access",
       });
     } catch {
       setMessage("Could not continue with Google. Please try again.");
       setGoogleLoading(false);
     }
   };
+
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-background-light px-4 py-8 text-slate-900">
+        <div className="mx-auto flex h-64 w-full max-w-md items-center justify-center">
+          <div className="flex items-center gap-3 text-slate-500">
+            <span className="material-symbols-outlined animate-spin">progress_activity</span>
+            <span>Checking your vault...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background-light px-4 py-8 text-slate-900">
