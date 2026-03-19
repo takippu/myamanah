@@ -765,98 +765,94 @@ function TrustedContactCard({
   console.log("[TrustedContactCard]", contact.name, { hasReleaseEmail, onNotify: !!onNotify, releaseEmail: releaseChannel?.releaseEmail });
   
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-sm transition-all hover:shadow-md">
+    <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md">
       {/* Top accent bar */}
       <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400" />
       
-      <div className="p-3 sm:p-4">
-        {/* Header: Avatar + Info + Actions */}
-        <div className="flex items-start gap-2 sm:gap-3">
-          {/* Avatar */}
-          <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-700">
-            <span className="material-symbols-outlined text-[18px] sm:text-[22px]">person</span>
+      <div className="p-4">
+        {/* Header Row: Name + Actions */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold text-slate-900 leading-tight">
+              {contact.name}
+            </h3>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {contact.relation || "Trusted contact"}
+            </p>
           </div>
           
-          {/* Info + Actions container */}
-          <div className="min-w-0 flex-1">
-            {/* Name and Action buttons row */}
-            <div className="flex items-start justify-between gap-2">
-              {/* Name and relation */}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900 break-words">{contact.name}</p>
-                <p className="text-xs text-slate-500">{contact.relation || "Trusted contact"}</p>
-              </div>
-              
-              {/* Action buttons - horizontal on larger screens, can wrap */}
-              <div className="flex items-center gap-1 shrink-0">
-                {hasReleaseEmail && onNotify && (
-                  <button 
-                    type="button" 
-                    className="flex h-8 sm:h-9 items-center justify-center gap-0.5 sm:gap-1 rounded-lg sm:rounded-xl bg-sky-50 px-2 sm:px-3 text-sky-700 transition-colors hover:bg-sky-100" 
-                    onClick={onNotify}
-                    title="Notify contact now"
-                  >
-                    <span className="material-symbols-outlined text-[16px] sm:text-[18px]">notifications_active</span>
-                    <span className="text-[10px] sm:text-xs font-semibold hidden sm:inline">Notify</span>
-                  </button>
-                )}
-                <button 
-                  type="button" 
-                  className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700" 
-                  onClick={onEdit}
-                  title="Edit contact"
-                >
-                  <span className="material-symbols-outlined text-[16px] sm:text-[18px]">edit</span>
-                </button>
-                <button 
-                  type="button" 
-                  className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 transition-colors hover:bg-rose-50 hover:text-rose-700" 
-                  onClick={onDelete}
-                  title="Delete contact"
-                >
-                  <span className="material-symbols-outlined text-[16px] sm:text-[18px]">delete</span>
-                </button>
-              </div>
-            </div>
-            
-            {/* Preferred contact method */}
-            {contact.contact && (
-              <div className="mt-1.5 sm:mt-2 flex items-center gap-1.5 text-xs text-slate-600">
-                <span className="material-symbols-outlined text-[14px] text-slate-400 shrink-0">chat</span>
-                <span className="break-words">{contact.contact}</span>
-              </div>
+          {/* Action Icons - Compact */}
+          <div className="flex items-center gap-1 shrink-0">
+            {hasReleaseEmail && onNotify && (
+              <button 
+                type="button" 
+                onClick={onNotify}
+                className="p-2 rounded-lg text-sky-600 hover:bg-sky-50 transition-colors"
+                title="Notify"
+              >
+                <span className="material-symbols-outlined text-xl">notifications_active</span>
+              </button>
             )}
+            <button 
+              type="button" 
+              onClick={onEdit}
+              className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+              title="Edit"
+            >
+              <span className="material-symbols-outlined text-xl">edit</span>
+            </button>
+            <button 
+              type="button" 
+              onClick={onDelete}
+              className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+              title="Delete"
+            >
+              <span className="material-symbols-outlined text-xl">delete</span>
+            </button>
           </div>
         </div>
+        
+        {/* Contact Method */}
+        {contact.contact && (
+          <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+            <span className="material-symbols-outlined text-base text-slate-400">chat</span>
+            <span>{contact.contact}</span>
+          </div>
+        )}
 
-        {/* Emergency Delivery Section */}
+        {/* Divider */}
+        <div className="my-3 border-t border-slate-100" />
+
+        {/* Emergency Delivery Info */}
         {releaseChannel ? (
-          <div className="mt-3 sm:mt-4 rounded-lg sm:rounded-xl border border-emerald-100 bg-gradient-to-r from-emerald-50/80 to-teal-50/50 p-2.5 sm:p-3">
-            <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-emerald-600 shrink-0">mark_email_read</span>
-              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-emerald-800">Emergency delivery configured</span>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-emerald-600 text-lg">mark_email_read</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                Emergency delivery ready
+              </span>
             </div>
-            <div className="mt-1.5 sm:mt-2 space-y-1">
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="material-symbols-outlined text-[14px] text-emerald-600 shrink-0">email</span>
-                <span className="text-slate-700 break-all">{releaseChannel.releaseEmail}</span>
+            <div className="space-y-1.5 pl-7">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="material-symbols-outlined text-sm text-slate-400">email</span>
+                <span className="text-slate-700">{releaseChannel.releaseEmail}</span>
               </div>
               {releaseChannel.phoneNumber && (
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="material-symbols-outlined text-[14px] text-emerald-600 shrink-0">phone</span>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="material-symbols-outlined text-sm text-slate-400">phone</span>
                   <span className="text-slate-600">{releaseChannel.phoneNumber}</span>
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="mt-3 sm:mt-4 rounded-lg sm:rounded-xl border border-amber-100 bg-amber-50/70 p-2.5 sm:p-3">
-            <div className="flex items-start gap-1.5">
-              <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-amber-600 shrink-0 mt-0.5">info</span>
-              <div>
-                <p className="text-[10px] sm:text-[11px] font-medium text-amber-800">Emergency delivery not set up</p>
-                <p className="text-[10px] sm:text-[11px] text-amber-700/80">Add a release email to enable deadman switch delivery</p>
-              </div>
+          <div className="flex items-start gap-2">
+            <span className="material-symbols-outlined text-amber-500 text-lg mt-0.5">info</span>
+            <div>
+              <p className="text-sm font-medium text-amber-800">Emergency delivery not set up</p>
+              <p className="text-xs text-amber-600 mt-0.5">
+                Add a release email to enable deadman switch delivery
+              </p>
             </div>
           </div>
         )}
