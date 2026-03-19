@@ -548,14 +548,16 @@ export default function DigitalLegacyPage() {
               ) : null}
             </section>
 
-            <FloatingField label="Notes" labelClassName="text-sky-700">
-              <textarea
-                className="h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
-                placeholder="Notes, recovery steps, or account instructions"
-                value={form.notes}
-                onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
-              />
-            </FloatingField>
+            <div className="pb-8">
+              <FloatingField label="Notes" labelClassName="text-sky-700">
+                <textarea
+                  className="h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-5 text-sm outline-none transition-colors focus:border-sky-500"
+                  placeholder="Notes, recovery steps, or account instructions"
+                  value={form.notes}
+                  onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+                />
+              </FloatingField>
+            </div>
           </div>
         </RecordListDrawer>
 

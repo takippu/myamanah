@@ -211,6 +211,20 @@ export default function ReleaseTokenPage() {
               </div>
             )}
 
+            {/* Help Contact */}
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined text-blue-600">support_agent</span>
+                <div className="flex-1">
+                  <p className="font-semibold text-blue-900">Need Help?</p>
+                  <p className="mt-1 text-sm text-blue-800">
+                    If you need assistance with decryption or have questions, please contact{" "}
+                    <a href="mailto:thaqifdevv@gmail.com" className="font-semibold underline">thaqifdevv@gmail.com</a>
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* What is this file? */}
             <details className="rounded-2xl border border-slate-200 bg-slate-50">
               <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700">

@@ -7,7 +7,7 @@ interface BalanceAdjustModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentBalance: number;
-  onSave: (amount: number, notes?: string, date?: string) => void;
+  onSave: (amount: number, notes?: string, date?: string) => void | Promise<void>;
   type: "debt" | "debtor" | "asset";
   currencyPrefix?: string;
 }
@@ -24,6 +24,7 @@ export function BalanceAdjustModal({
   const [notes, setNotes] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [adjustmentType, setAdjustmentType] = useState<"increase" | "decrease">("decrease");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -37,9 +38,11 @@ export function BalanceAdjustModal({
 
   if (!isOpen) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const amount = parseFloat(changeAmount) || 0;
     if (amount <= 0) return;
+    
+    setIsSaving(true);
     
     // For debts: negative = payment (reduce debt), positive = increase
     // For debtors: positive = payment received (reduce amount owed), negative = additional loan
@@ -49,7 +52,8 @@ export function BalanceAdjustModal({
       finalAmount = -amount;
     }
     
-    onSave(finalAmount, notes.trim() || undefined, date);
+    await onSave(finalAmount, notes.trim() || undefined, date);
+    setIsSaving(false);
     onClose();
   };
 
@@ -188,11 +192,18 @@ export function BalanceAdjustModal({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={handleSave}
-            disabled={!changeAmount || parseFloat(changeAmount) <= 0}
-            className={`flex-1 rounded-2xl bg-${primaryColor}-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-${primaryColor}-700 disabled:opacity-50 disabled:cursor-not-allowed`}
+            onClick={() => void handleSave()}
+            disabled={!changeAmount || parseFloat(changeAmount) <= 0 || isSaving}
+            className={`flex-1 rounded-2xl bg-${primaryColor}-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-${primaryColor}-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
           >
-            Save
+            {isSaving ? (
+              <>
+                <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+                Saving...
+              </>
+            ) : (
+              "Save"
+            )}
           </button>
           <button
             type="button"
