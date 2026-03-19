@@ -513,13 +513,24 @@ function AccessSetupPageContent() {
                   <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
                     Passphrase <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type={showPassphrase ? "text" : "password"}
-                    value={unlockPassphrase}
-                    onChange={(e) => setUnlockPassphrase(e.target.value)}
-                    placeholder="Enter your passphrase"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassphrase ? "text" : "password"}
+                      value={unlockPassphrase}
+                      onChange={(e) => setUnlockPassphrase(e.target.value)}
+                      placeholder="Enter your passphrase"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-12 text-base outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassphrase(!showPassphrase)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <span className="material-symbols-outlined">
+                        {showPassphrase ? "visibility_off" : "visibility"}
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 <div>

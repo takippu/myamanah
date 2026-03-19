@@ -92,8 +92,17 @@ ${loginUrl}`,
       html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1f2937;">
         <!-- Header -->
         <div style="text-align: center; margin-bottom: 32px;">
-          <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; background: linear-gradient(135deg, #059669 0%, #047857 100%); border-radius: 16px; margin-bottom: 16px;">
-            <span style="font-size: 32px;">🛡️</span>
+          <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; background: linear-gradient(135deg, #059669 0%, #047857 100%); border-radius: 16px; margin: 0 auto 16px auto;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="40" height="40">
+              <defs>
+                <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#ffffff; stop-opacity:0.95"/>
+                  <stop offset="100%" style="stop-color:#ffffff; stop-opacity:0.85"/>
+                </linearGradient>
+              </defs>
+              <path d="M24 4L6 12v11.2c0 9.2 7.7 17.8 18 20 10.3-2.2 18-10.8 18-20V12L24 4z" fill="url(#shieldGrad)"/>
+              <path d="M20 32.4l-7.4-7.4 1.9-1.9 5.5 5.5 11.5-11.5 1.9 1.9L20 32.4z" fill="#059669"/>
+            </svg>
           </div>
           <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #111827;">You've Been Added as a Trusted Contact</h1>
         </div>
