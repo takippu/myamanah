@@ -59,7 +59,8 @@ function AccessSetupPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const shouldRestore = searchParams.get("restore") === "1";
-  const [mode, setMode] = useState<"checking" | "unlock" | "create" | "google_unlock">("checking");
+  const forceCreateMode = searchParams.get("mode") === "new";
+  const [mode, setMode] = useState<"checking" | "unlock" | "create" | "google_unlock" | "google_create">("checking");
   const [step, setStep] = useState<"passphrase" | "recovery" | "confirm" | "complete">("passphrase");
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
@@ -130,14 +131,34 @@ function AccessSetupPageContent() {
         // Auth check failed, continue as unauthenticated
       }
 
-      // If coming from login for restore, show unlock form
+      // If coming from login for restore, check cloud backup status
       if (shouldRestore && !localVaultExists) {
         console.log("[Access] Restore mode, authUser:", authUser?.email || "none");
         if (!cancelled) {
           if (authUser) {
             setGoogleUser(authUser);
-            setMode("google_unlock");
-            console.log("[Access] Set mode: google_unlock");
+            // Check if user has cloud backup
+            try {
+              const statusRes = await fetch("/api/vault/status", { 
+                credentials: "include",
+                cache: "no-store",
+              });
+              if (statusRes.ok) {
+                const status = await statusRes.json() as { hasBackup: boolean };
+                if (status.hasBackup) {
+                  setMode("google_unlock");
+                  console.log("[Access] Set mode: google_unlock (has cloud backup)");
+                } else {
+                  setMode("google_create");
+                  console.log("[Access] Set mode: google_create (no cloud backup)");
+                }
+              } else {
+                // Default to create mode if can't check status
+                setMode("google_create");
+              }
+            } catch {
+              setMode("google_create");
+            }
           } else {
             setMode("unlock");
             console.log("[Access] Set mode: unlock (no auth user)");
@@ -146,11 +167,46 @@ function AccessSetupPageContent() {
         return;
       }
 
-      // If authenticated via Google but no local vault, show Google unlock mode
+      // If force create mode requested, show create even if authenticated
+      if (forceCreateMode && !localVaultExists) {
+        if (!cancelled) {
+          if (authUser) {
+            setGoogleUser(authUser);
+            setMode("google_create");
+            console.log("[Access] Set mode: google_create (forced via ?mode=new)");
+          } else {
+            setMode("create");
+            console.log("[Access] Set mode: create (forced via ?mode=new, no auth)");
+          }
+        }
+        return;
+      }
+
+      // If authenticated via Google but no local vault, check cloud backup status
       if (authUser && !localVaultExists) {
         if (!cancelled) {
           setGoogleUser(authUser);
-          setMode("google_unlock");
+          // Check if user has cloud backup
+          try {
+            const statusRes = await fetch("/api/vault/status", { 
+              credentials: "include",
+              cache: "no-store",
+            });
+            if (statusRes.ok) {
+              const status = await statusRes.json() as { hasBackup: boolean };
+              if (status.hasBackup) {
+                setMode("google_unlock");
+                console.log("[Access] Set mode: google_unlock (has cloud backup)");
+              } else {
+                setMode("google_create");
+                console.log("[Access] Set mode: google_create (no cloud backup)");
+              }
+            } else {
+              setMode("google_create");
+            }
+          } catch {
+            setMode("google_create");
+          }
         }
         return;
       }
@@ -214,6 +270,10 @@ function AccessSetupPageContent() {
     if (validatePassphrase()) {
       if (!recoveryKey) {
         setRecoveryKey(generateRecoveryKey());
+      }
+      // If coming from google_create mode, switch to create mode for remaining steps
+      if (mode === "google_create") {
+        setMode("create");
       }
       setStep("recovery");
     }
@@ -661,6 +721,131 @@ function AccessSetupPageContent() {
                   className="mt-2 w-full rounded-2xl border border-dashed border-rose-300 px-4 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-rose-600 transition-colors hover:border-rose-500 hover:text-rose-700"
                 >
                   Create New Vault (Data Will Be Lost)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Google OAuth Create Mode - For authenticated users with no cloud backup */}
+          {mode === "google_create" && googleUser && (
+            <div className="space-y-6">
+              {/* Google user indicator */}
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-100 text-blue-600">
+                  {googleUser.image ? (
+                    <img 
+                      src={googleUser.image} 
+                      alt="" 
+                      className="h-20 w-20 rounded-3xl object-cover"
+                    />
+                  ) : (
+                    <span className="material-symbols-outlined text-[40px]">account_circle</span>
+                  )}
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5">
+                  <span className="material-symbols-outlined text-[16px] text-blue-600">check_circle</span>
+                  <span className="text-xs font-medium text-blue-700">Signed in as {googleUser.email}</span>
+                </div>
+                <h1 className="mt-4 text-2xl font-light tracking-tight text-slate-900">
+                  Create your <span className="font-semibold">first vault</span>
+                </h1>
+                <p className="mt-2 max-w-sm text-sm text-slate-500">
+                  Welcome! You don&apos;t have a vault yet. Create one now and you can enable cloud backup afterward.
+                </p>
+              </div>
+
+              {/* Info box */}
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/70 px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-blue-600">info</span>
+                  <div className="text-xs text-blue-800">
+                    <p className="font-semibold">No existing vault found</p>
+                    <p className="mt-1">
+                      We couldn&apos;t find a cloud backup for <strong>{googleUser.email}</strong>. 
+                      Create a new vault to get started. You can enable encrypted cloud backup later in Settings.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Your Name
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="How you'd like this vault labeled"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Passphrase <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassphrase ? "text" : "password"}
+                      value={passphrase}
+                      onChange={(e) => setPassphrase(e.target.value)}
+                      placeholder="Minimum 12 characters"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassphrase(!showPassphrase)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    >
+                      <span className="material-symbols-outlined">
+                        {showPassphrase ? "visibility_off" : "visibility"}
+                      </span>
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Use a phrase you won&apos;t forget. Spaces allowed.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Confirm Passphrase <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type={showPassphrase ? "text" : "password"}
+                    value={confirmPassphrase}
+                    onChange={(e) => setConfirmPassphrase(e.target.value)}
+                    placeholder="Type it again"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePassphraseSubmit}
+                disabled={!passphrase || !confirmPassphrase}
+                className="flex w-full items-center justify-center gap-3 rounded-[2rem] bg-gradient-to-r from-blue-600 to-emerald-700 py-5 text-sm font-semibold tracking-wide text-white shadow-xl shadow-blue-900/20 transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continue
+                <span className="material-symbols-outlined">arrow_forward</span>
+              </button>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-center text-xs text-slate-400">
+                  Not {googleUser.email}?
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await authClient.signOut();
+                    setMode("create");
+                    setGoogleUser(null);
+                  }}
+                  className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-500 hover:text-slate-900"
+                >
+                  Sign Out and Use Different Account
                 </button>
               </div>
             </div>
