@@ -37,6 +37,7 @@ export default function AssetRecordDetailPage() {
   const params = useParams<{ id: string }>();
   const [record, setRecord] = useState<AssetRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
 
   const refreshData = async () => {
@@ -55,6 +56,7 @@ export default function AssetRecordDetailPage() {
 
   const handleAdjustValue = async (amount: number, notes?: string, date?: string) => {
     if (!record) return;
+    setIsSaving(true);
 
     const currentValue = record.valueNumber || parseAmount(record.value || "0");
     const newValue = currentValue + amount;
@@ -85,11 +87,14 @@ export default function AssetRecordDetailPage() {
       await saveVaultData({ ...(vault || emptyVaultData()), assets: updatedAssets });
     } catch (error) {
       console.error("Failed to save transaction:", error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleDeleteTransaction = async (transactionId: string) => {
     if (!record || !record.transactions) return;
+    setIsSaving(true);
 
     const updatedTransactions = record.transactions.filter((t) => t.id !== transactionId);
     
@@ -113,6 +118,8 @@ export default function AssetRecordDetailPage() {
       await saveVaultData({ ...(vault || emptyVaultData()), assets: updatedAssets });
     } catch (error) {
       console.error("Failed to delete transaction:", error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -126,6 +133,17 @@ export default function AssetRecordDetailPage() {
     <div className="min-h-screen bg-[#F2F2F7] font-sans text-slate-800 antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-[#F2F2F7]">
         <VaultSessionGuard />
+        
+        {/* Saving Overlay */}
+        {isSaving && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3 rounded-3xl bg-white p-6 shadow-xl">
+              <span className="material-symbols-outlined animate-spin text-3xl text-emerald-600">progress_activity</span>
+              <p className="text-sm font-medium text-slate-700">Securing your data...</p>
+            </div>
+          </div>
+        )}
+        
         <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F2F2F7]/80 px-6 py-5 backdrop-blur-lg">
           <Link
             href="/asset-records"

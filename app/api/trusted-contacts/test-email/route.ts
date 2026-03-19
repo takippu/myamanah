@@ -116,8 +116,11 @@ ${loginUrl}`,
 
               <!-- Header -->
               <div style="text-align: center; margin-bottom: 32px;">
-                <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; background: linear-gradient(135deg, #059669 0%, #047857 100%); border-radius: 16px; margin-bottom: 16px;">
-                  <span style="font-size: 32px;">🛡️</span>
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; background: linear-gradient(135deg, #059669 0%, #047857 100%); border-radius: 16px; margin: 0 auto 16px auto; text-align: center;">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="40" height="40" style="display: block; margin: 0 auto;">
+                    <path d="M24 4L6 12v11.2c0 9.2 7.7 17.8 18 20 10.3-2.2 18-10.8 18-20V12L24 4z" fill="#ffffff"/>
+                    <path d="M20 32.4l-7.4-7.4 1.9-1.9 5.5 5.5 11.5-11.5 1.9 1.9L20 32.4z" fill="#059669"/>
+                  </svg>
                 </div>
                 <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #111827;">MyAmanah Secure Retrieval</h1>
                 <p style="margin: 8px 0 0 0; color: #6b7280; font-size: 14px;">Privacy-first legacy organizer</p>
