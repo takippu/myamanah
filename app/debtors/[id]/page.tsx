@@ -148,8 +148,8 @@ export default function DebtorDetailPage() {
             <>
               {/* Main Info Card */}
               <section className="glass-card rounded-[2rem] border border-[#e7eaee] bg-white/90 p-6 shadow-[0_16px_30px_-18px_rgba(15,23,42,0.25)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
                     <div className="mb-1 flex items-center gap-2">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                         debtor.status === "paid" 
@@ -159,9 +159,9 @@ export default function DebtorDetailPage() {
                         {debtor.status}
                       </span>
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-900">{debtor.name}</h2>
+                    <h2 className="text-xl font-bold text-slate-900 break-words">{debtor.name}</h2>
                   </div>
-                  <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-right text-emerald-700">
+                  <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-right text-emerald-700 shrink-0">
                     <p className="text-[10px] font-bold uppercase tracking-widest">Remaining</p>
                     <p className="mt-1 text-sm font-semibold">RM {remainingAmount.toLocaleString()}</p>
                   </div>
@@ -204,7 +204,7 @@ export default function DebtorDetailPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Date Lent</p>
                       <p className="mt-2 text-sm text-slate-800">

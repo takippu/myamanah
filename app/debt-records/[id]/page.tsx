@@ -131,13 +131,13 @@ export default function DebtRecordDetailPage() {
             <>
               {/* Main Info Card */}
               <section className="glass-card rounded-[2rem] border border-[#e7eaee] bg-white/90 p-6 shadow-[0_16px_30px_-18px_rgba(15,23,42,0.25)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{record.debtType}</p>
-                    <h2 className="mt-1 text-2xl font-bold text-slate-900">{record.creditor}</h2>
+                    <h2 className="mt-1 text-xl font-bold text-slate-900 break-words">{record.creditor}</h2>
                   </div>
-                  <div className="rounded-2xl bg-rose-50 px-4 py-3 text-right text-rose-700">
-                    <p className="text-[10px] font-bold uppercase tracking-widest">Remaining</p>
+                  <div className="rounded-2xl bg-rose-50 px-3 py-2 text-right text-rose-700 shrink-0">
+                    <p className="text-[10px] font-bold uppercase tracking-widest">Balance</p>
                     <p className="mt-1 text-sm font-semibold">RM {remainingAmount.toLocaleString()}</p>
                   </div>
                 </div>
@@ -177,7 +177,7 @@ export default function DebtRecordDetailPage() {
                     <p className="mt-2 text-sm text-slate-800">{record.whereDocs}</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Due Date</p>
                       <p className="mt-2 text-sm text-slate-800">{record.dueDate || "Not set"}</p>
@@ -193,9 +193,9 @@ export default function DebtRecordDetailPage() {
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Contact Details</p>
                       <div className="mt-3 space-y-3">
                         {record.contacts.map((contact, index) => (
-                          <div key={`${contact.name}-${index}`} className="grid grid-cols-2 gap-3 text-sm text-slate-800">
-                            <p>{contact.name || "Not set"}</p>
-                            <p>{contact.method || "Not set"}</p>
+                          <div key={`${contact.name}-${index}`} className="flex flex-col sm:grid sm:grid-cols-2 gap-1 text-sm text-slate-800">
+                            <p className="font-medium">{contact.name || "Not set"}</p>
+                            <p className="text-slate-600">{contact.method || "Not set"}</p>
                           </div>
                         ))}
                       </div>

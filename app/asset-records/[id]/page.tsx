@@ -172,13 +172,13 @@ export default function AssetRecordDetailPage() {
             <>
               {/* Main Info Card */}
               <section className="glass-card rounded-[2rem] border border-[#e7eaee] bg-white/90 p-6 shadow-[0_16px_30px_-18px_rgba(15,23,42,0.25)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{record.assetType}</p>
-                    <h2 className="mt-1 text-2xl font-bold text-slate-900">{record.institution}</h2>
+                    <h2 className="mt-1 text-xl font-bold text-slate-900 break-words">{record.institution}</h2>
                   </div>
-                  <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-right text-emerald-700">
-                    <p className="text-[10px] font-bold uppercase tracking-widest">Current Value</p>
+                  <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-right text-emerald-700 shrink-0">
+                    <p className="text-[10px] font-bold uppercase tracking-widest">Value</p>
                     <p className="mt-1 text-sm font-semibold">RM {currentValue.toLocaleString()}</p>
                   </div>
                 </div>
@@ -214,9 +214,9 @@ export default function AssetRecordDetailPage() {
                     {contacts.length > 0 ? (
                       <div className="mt-3 space-y-3">
                         {contacts.map((contact, index) => (
-                          <div key={`${contact.name}-${index}`} className="grid grid-cols-2 gap-3 text-sm text-slate-800">
-                            <p>{contact.name || "Not set"}</p>
-                            <p>{contact.method || "Not set"}</p>
+                          <div key={`${contact.name}-${index}`} className="flex flex-col sm:grid sm:grid-cols-2 gap-1 text-sm text-slate-800">
+                            <p className="font-medium">{contact.name || "Not set"}</p>
+                            <p className="text-slate-600">{contact.method || "Not set"}</p>
                           </div>
                         ))}
                       </div>
