@@ -66,6 +66,7 @@ export default function VaultPage() {
     releaseEmail: "",
     phoneNumber: "",
   });
+  const [isSavingTrusted, setIsSavingTrusted] = useState(false);
   // Notify dialog state
   const [notifyDialog, setNotifyDialog] = useState<{
     isOpen: boolean;
@@ -190,6 +191,9 @@ export default function VaultPage() {
       return;
     }
 
+    setIsSavingTrusted(true);
+    
+    try {
     const vault = (await loadVaultData()) ?? emptyVaultData();
     const currentContacts = vault.trustedContacts ?? [];
     const trustedContactId = editingTrustedId ?? crypto.randomUUID();
@@ -240,8 +244,11 @@ export default function VaultPage() {
       }
     }
     
-    resetTrustedForm();
-    await refreshData();
+      resetTrustedForm();
+      await refreshData();
+    } finally {
+      setIsSavingTrusted(false);
+    }
   };
 
   const openDeleteDialog = (id: string, name: string) => {
@@ -530,11 +537,18 @@ export default function VaultPage() {
                   footer={
                     <button
                       type="button"
-                      className="w-full rounded-[1.3rem] bg-emerald-700 py-3 text-sm font-semibold tracking-wide text-white shadow-xl shadow-emerald-900/20 transition-all active:scale-[0.98]"
+                      className="w-full rounded-[1.3rem] bg-emerald-700 py-3 text-sm font-semibold tracking-wide text-white shadow-xl shadow-emerald-900/20 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       onClick={() => void saveTrustedContact()}
-                      disabled={!trustedForm.name.trim() || !trustedForm.contact.trim()}
+                      disabled={!trustedForm.name.trim() || !trustedForm.contact.trim() || isSavingTrusted}
                     >
-                      {editingTrustedId ? "Update Contact" : "Save Contact"}
+                      {isSavingTrusted ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                          Saving...
+                        </>
+                      ) : (
+                        editingTrustedId ? "Update Contact" : "Save Contact"
+                      )}
                     </button>
                   }
                 >
@@ -814,7 +828,7 @@ function TrustedContactCard({
       
       <div className="p-4">
         {/* Header Row: Name + Actions */}
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-slate-900 leading-tight">
               {contact.name}
@@ -830,27 +844,27 @@ function TrustedContactCard({
               <button 
                 type="button" 
                 onClick={onNotify}
-                className="p-2 rounded-lg text-sky-600 hover:bg-sky-50 transition-colors"
-                title="Notify"
+                className="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-sky-50 text-sky-600 hover:bg-sky-100 transition-colors"
+                title="Notify contact"
               >
-                <span className="material-symbols-outlined text-xl">notifications_active</span>
+                <span className="material-symbols-outlined text-[20px] leading-none">notifications_active</span>
               </button>
             )}
             <button 
               type="button" 
               onClick={onEdit}
-              className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+              className="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-slate-50 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
               title="Edit"
             >
-              <span className="material-symbols-outlined text-xl">edit</span>
+              <span className="material-symbols-outlined text-[20px] leading-none">edit</span>
             </button>
             <button 
               type="button" 
               onClick={onDelete}
-              className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+              className="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-slate-50 text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition-colors"
               title="Delete"
             >
-              <span className="material-symbols-outlined text-xl">delete</span>
+              <span className="material-symbols-outlined text-[20px] leading-none">delete</span>
             </button>
           </div>
         </div>

@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUserFromRequest } from "@/lib/auth";
 import { sendResendEmail } from "@/lib/release-mailer";
 import { recordReleaseAuditEvent } from "@/lib/release-audit";
+import {
+  createReleaseToken,
+  sha256Hex,
+  calculateRetrievalExpiry,
+} from "@/lib/release-utils";
 
 function appBaseUrl(): string {
   return process.env.BETTER_AUTH_URL || "http://localhost:3000";
@@ -10,7 +15,7 @@ function appBaseUrl(): string {
 
 /**
  * POST /api/trusted-contacts/test-email
- * Send a test email to all trusted contacts with release channels
+ * Send a REAL test email with working retrieval links to all trusted contacts
  */
 export async function POST() {
   const user = await getAuthUserFromRequest();
@@ -19,6 +24,18 @@ export async function POST() {
   }
 
   try {
+    // Check if user has a vault backup stored
+    const vaultBackup = await prisma.vaultBackup.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!vaultBackup) {
+      return NextResponse.json(
+        { error: "No encrypted vault backup found. Please enable encrypted backup first." },
+        { status: 404 }
+      );
+    }
+
     // Get all trusted contacts with release channels for this user
     const releaseChannels = await prisma.trustedContactReleaseChannel.findMany({
       where: { userId: user.id },
@@ -31,35 +48,61 @@ export async function POST() {
       );
     }
 
-    // Generate a test token (for demonstration - won't actually work)
-    const testToken = "TEST_" + Math.random().toString(36).substring(2, 15);
-    const claimUrl = `${appBaseUrl()}/release/${testToken}`;
+    const now = new Date();
+    const expiresAt = calculateRetrievalExpiry(now);
     const loginUrl = `${appBaseUrl()}/login`;
-    
-    // Send test email to each contact
+
+    // Create REAL release tokens and send emails
     const results = await Promise.allSettled(
       releaseChannels.map(async (channel) => {
         if (!channel.releaseEmail) return null;
-        
+
         try {
+          // Create a REAL release token in the database
+          const rawToken = createReleaseToken();
+          await prisma.releaseRetrievalToken.create({
+            data: {
+              userId: user.id,
+              trustedContactId: channel.trustedContactId,
+              tokenHash: sha256Hex(rawToken),
+              expiresAt,
+            },
+          });
+
+          const claimUrl = `${appBaseUrl()}/release/${rawToken}`;
+
+          await recordReleaseAuditEvent({
+            userId: user.id,
+            trustedContactId: channel.trustedContactId,
+            type: "retrieval_token_created",
+            metadataJson: {
+              expiresAt: expiresAt.toISOString(),
+              isTest: true,
+            },
+          });
+
           await sendResendEmail({
             to: channel.releaseEmail,
             subject: "[TEST] MyAmanah Secure Retrieval Link",
-            text: `[THIS IS A TEST EMAIL - NO ACTION REQUIRED]
+            text: `[THIS IS A TEST - REAL WORKING LINK]
 
-A MyAmanah encrypted backup has been released to you.
+A MyAmanah encrypted backup test release has been sent to you.
 
 Owner: ${user.email}
 
-If this were a real deadman switch event, you would receive a secure retrieval link like this:
+🔐 SECURE RETRIEVAL LINK (WORKS FOR 7 DAYS):
 ${claimUrl}
 
-What happens next (in a real event):
-1. Click the secure retrieval link above
-2. You will need the owner's recovery key, shared separately, to open the backup
-3. The link expires in 7 days for security
+What you can do with this test link:
+1. Click the link to open the secure retrieval page
+2. View the release status and expiry information
+3. Download the encrypted vault backup (you'll need the owner's recovery key)
+4. The owner shared the recovery key separately - you'll need it to decrypt
 
-This is only a test to verify your email configuration is working correctly. No action is required.
+⚠️ IMPORTANT: This is a TEST release. In a real event:
+- The email subject won't say "[TEST]"
+- The release happens automatically when the owner misses their check-in
+- The same secure process applies
 
 ---
 MyAmanah - Privacy-first legacy organizer
@@ -68,7 +111,7 @@ ${loginUrl}`,
               <!-- Test Banner -->
               <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 16px 20px; border-radius: 12px; margin-bottom: 24px; text-align: center;">
                 <p style="margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.05em;">🧪 THIS IS A TEST EMAIL</p>
-                <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9;">No action required - testing deadman switch configuration</p>
+                <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9;">This link works for 7 days - testing real retrieval flow</p>
               </div>
 
               <!-- Header -->
@@ -83,34 +126,42 @@ ${loginUrl}`,
               <!-- Content -->
               <div style="background: #f9fafb; border-radius: 16px; padding: 24px; margin-bottom: 24px;">
                 <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.6;">
-                  A MyAmanah encrypted backup has been <strong>released to you</strong>.
+                  A <strong>test release</strong> of a MyAmanah encrypted backup has been sent to you.
                 </p>
-                
+
                 <div style="background: white; border-radius: 12px; padding: 16px; margin-bottom: 20px; border-left: 4px solid #059669;">
                   <p style="margin: 0 0 8px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Vault Owner</p>
                   <p style="margin: 0; font-size: 16px; font-weight: 500; color: #111827;">${user.email}</p>
                 </div>
 
-                <!-- Simulated Retrieval Link -->
-                <div style="background: #fef3c7; border: 2px dashed #f59e0b; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 20px;">
-                  <p style="margin: 0 0 12px 0; font-size: 12px; color: #92400e; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Simulated Retrieval Link (Test Only)</p>
-                  <a href="${loginUrl}" style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                <!-- REAL Working Retrieval Link -->
+                <div style="background: #d1fae5; border: 2px solid #059669; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 20px;">
+                  <p style="margin: 0 0 12px 0; font-size: 12px; color: #065f46; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">🔓 Secure Retrieval Link (REAL - Works for 7 Days)</p>
+                  <a href="${claimUrl}" style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
                     Open Secure Retrieval Page
                   </a>
-                  <p style="margin: 12px 0 0 0; font-size: 12px; color: #92400e;">
-                    ⏰ In a real event, this link would expire in 7 days
+                  <p style="margin: 12px 0 0 0; font-size: 12px; color: #065f46;">
+                    ⏰ Expires: ${expiresAt.toLocaleDateString('en-US', { dateStyle: 'medium' })}
                   </p>
                 </div>
 
-                <!-- What Happens Next -->
+                <!-- What You Can Do -->
                 <div style="margin-bottom: 20px;">
-                  <p style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">What happens next (in a real event):</p>
+                  <p style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">What you can do with this test:</p>
                   <ol style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.8; color: #4b5563;">
                     <li>Click the secure retrieval link above</li>
-                    <li>You will need the <strong>owner's recovery key</strong>, shared separately, to open the backup</li>
-                    <li>Download the encrypted vault backup file</li>
-                    <li>Use the recovery key to decrypt and access the contents</li>
+                    <li>View the release status and expiry information</li>
+                    <li>Download the encrypted vault backup</li>
+                    <li><strong>Use the owner's recovery key</strong> (shared separately) to decrypt</li>
                   </ol>
+                </div>
+
+                <!-- Test vs Real -->
+                <div style="background: #fef3c7; border-radius: 10px; padding: 16px; border-left: 4px solid #f59e0b; margin-bottom: 20px;">
+                  <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: #92400e;">⚠️ Test vs. Real Event</p>
+                  <p style="margin: 0; font-size: 13px; color: #92400e; line-height: 1.5;">
+                    This is a <strong>TEST</strong> - the owner triggered this manually. In a real event, the email won't say "[TEST]" and releases happen automatically when the owner misses their check-in.
+                  </p>
                 </div>
 
                 <!-- Important Note -->
@@ -124,7 +175,7 @@ ${loginUrl}`,
               <!-- Footer -->
               <div style="text-align: center; padding-top: 24px; border-top: 1px solid #e5e7eb;">
                 <p style="margin: 0 0 8px 0; font-size: 12px; color: #9ca3af;">
-                  This is a test email to verify your trusted contact configuration.
+                  This test verifies the complete retrieval flow works correctly.
                 </p>
                 <p style="margin: 0; font-size: 12px; color: #9ca3af;">
                   <a href="${loginUrl}" style="color: #059669; text-decoration: none;">MyAmanah</a> • Privacy-first legacy organizer
@@ -132,10 +183,23 @@ ${loginUrl}`,
               </div>
             </div>`,
           });
-          
+
+          await recordReleaseAuditEvent({
+            userId: user.id,
+            trustedContactId: channel.trustedContactId,
+            type: "test_email_sent",
+            metadataJson: {
+              notifiedEmail: channel.releaseEmail,
+              hasRealToken: true,
+              expiresAt: expiresAt.toISOString(),
+            },
+          });
+
           return {
             email: channel.releaseEmail,
             success: true,
+            tokenCreated: true,
+            expiresAt: expiresAt.toISOString(),
           };
         } catch (error) {
           return {
@@ -146,12 +210,6 @@ ${loginUrl}`,
         }
       })
     );
-
-    // Record audit event
-    await recordReleaseAuditEvent({
-      userId: user.id,
-      type: "test_email_sent",
-    });
 
     const successful = results.filter(
       (r) => r.status === "fulfilled" && r.value?.success
