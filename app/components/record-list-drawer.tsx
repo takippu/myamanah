@@ -39,7 +39,7 @@ export function RecordListDrawer({ open, title, onClose, children, footer }: Rec
         }
       `}</style>
       <div
-        className="fixed inset-0 z-[55] bg-slate-950/35"
+        className="fixed inset-0 z-[60] bg-slate-950/35"
         style={{ animation: "drawer-backdrop-in 240ms ease-out" }}
       >
       <button

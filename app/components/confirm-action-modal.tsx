@@ -37,7 +37,7 @@ export function ConfirmActionModal({
         };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 px-4 pb-6 pt-12 sm:items-center sm:justify-center">
+    <div className="fixed inset-0 z-[60] flex items-end bg-slate-950/45 px-4 pb-6 pt-12 sm:items-center sm:justify-center">
       <div className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.45)]">
         <div className="flex items-start gap-4">
           <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${accentClasses.iconWrap}`}>
