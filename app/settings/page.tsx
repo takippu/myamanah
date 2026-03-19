@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { AppBottomNav } from "../components/app-bottom-nav";
+import { PWAInstallSection } from "../components/pwa-install-section";
 import { VaultSessionGuard } from "../components/vault-session-guard";
 import { authClient } from "@/lib/auth-client";
 import { clearVaultSecrets } from "@/lib/vault-session";
@@ -437,6 +438,12 @@ function SettingsPageContent() {
               )}
             </section>
           )}
+
+          {/* App Installation */}
+          <section className="space-y-3">
+            <p className="ml-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">App Installation</p>
+            <PWAInstallSection />
+          </section>
 
           {/* About */}
           <section className="space-y-3">

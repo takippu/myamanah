@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Manrope } from "next/font/google";
 import "@fontsource/material-symbols-outlined";
 import "./globals.css";
@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 const manrope = Manrope({
-  variable: "--font-manrope", // generic variable, though we use font-display in CSS
+  variable: "--font-manrope",
   subsets: ["latin"],
   display: "swap",
 });
@@ -22,6 +22,28 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: "AmanahVault",
   description: "Zero-Knowledge Digital Legacy Organizer",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "AmanahVault",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+    ],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#10B981",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
