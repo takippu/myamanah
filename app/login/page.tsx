@@ -9,30 +9,21 @@ export default function LoginPage() {
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [isChecking, setIsChecking] = useState(true);
+  const [hasLocalVault, setHasLocalVault] = useState(false);
 
-  // Check if user already has a local vault
+  // Check if user already has a local vault (for display purposes only)
   useEffect(() => {
-    const checkLocalVault = () => {
-      const hasLocal = hasLocalVaultPayload();
-      if (hasLocal) {
-        // User has local vault, they should unlock it instead of signing in
-        router.replace("/access");
-      }
-      setIsChecking(false);
-    };
-    checkLocalVault();
-  }, [router]);
+    setHasLocalVault(hasLocalVaultPayload());
+  }, []);
 
   const continueWithGoogle = async () => {
     setGoogleLoading(true);
     setMessage(null);
     try {
-      // Sign in with Google, then go to access page which will check 
-      // if they have a cloud backup to restore or need to create new vault
+      // Sign in with Google, then go to settings page
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/access",
+        callbackURL: "/settings",
       });
     } catch {
       setMessage("Could not continue with Google. Please try again.");
@@ -40,26 +31,34 @@ export default function LoginPage() {
     }
   };
 
-  if (isChecking) {
-    return (
-      <div className="min-h-screen bg-background-light px-4 py-8 text-slate-900">
-        <div className="mx-auto flex h-64 w-full max-w-md items-center justify-center">
-          <div className="flex items-center gap-3 text-slate-500">
-            <span className="material-symbols-outlined animate-spin">progress_activity</span>
-            <span>Checking your vault...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background-light px-4 py-8 text-slate-900">
       <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-bold">Sign In to Restore Backup</h1>
+        <h1 className="text-2xl font-bold">Sign In</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Sign in with the Google account you used to enable cloud backup. After signing in, you can restore your encrypted vault.
+          Sign in with Google to enable encrypted cloud backup or restore from a previous backup.
         </p>
+
+        {hasLocalVault && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-amber-600">info</span>
+              <div>
+                <p className="text-sm font-medium text-amber-900">You have a local vault</p>
+                <p className="mt-1 text-xs text-amber-800">
+                  You already have a vault on this device. You can unlock it instead, or sign in with Google to enable cloud backup for it.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => router.push("/access")}
+                  className="mt-2 text-xs font-semibold text-amber-700 underline hover:text-amber-900"
+                >
+                  Unlock my existing vault →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <button
           className="mt-4 w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-slate-900 disabled:opacity-60"
@@ -70,13 +69,15 @@ export default function LoginPage() {
           {googleLoading ? "Redirecting..." : "Continue with Google"}
         </button>
 
-        <button
-          className="mt-2 w-full rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-bold text-slate-800"
-          type="button"
-          onClick={() => router.push("/access")}
-        >
-          Create New Vault Instead
-        </button>
+        {!hasLocalVault && (
+          <button
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-bold text-slate-800"
+            type="button"
+            onClick={() => router.push("/access")}
+          >
+            Create New Vault Instead
+          </button>
+        )}
 
         {message ? <p className="mt-3 text-sm text-slate-600">{message}</p> : null}
       </div>
