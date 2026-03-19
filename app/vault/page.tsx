@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { TrustedContactReleaseChannel } from "@prisma/client";
 import { AppBottomNav } from "../components/app-bottom-nav";
+import { ConfirmActionModal } from "../components/confirm-action-modal";
 import { FloatingField } from "../components/floating-field";
 import { CategoryCardSkeleton } from "../components/skeletons";
 import { RecordListDrawer } from "../components/record-list-drawer";
@@ -80,6 +81,16 @@ export default function VaultPage() {
     contactEmail: "",
     isSending: false,
     status: null,
+  });
+  // Delete confirmation dialog state
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    contactId: string | null;
+    contactName: string;
+  }>({
+    isOpen: false,
+    contactId: null,
+    contactName: "",
   });
 
   const refreshData = async () => {
@@ -233,7 +244,28 @@ export default function VaultPage() {
     await refreshData();
   };
 
-  const deleteTrustedContact = async (id: string) => {
+  const openDeleteDialog = (id: string, name: string) => {
+    setDeleteDialog({
+      isOpen: true,
+      contactId: id,
+      contactName: name,
+    });
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteDialog({
+      isOpen: false,
+      contactId: null,
+      contactName: "",
+    });
+  };
+
+  const confirmDeleteTrustedContact = async () => {
+    if (!deleteDialog.contactId) return;
+    
+    const id = deleteDialog.contactId;
+    closeDeleteDialog();
+    
     const vault = (await loadVaultData()) ?? emptyVaultData();
     await saveVaultData({
       ...vault,
@@ -474,7 +506,7 @@ export default function VaultPage() {
                         contact={contact}
                         releaseChannel={channel}
                         onEdit={() => openTrustedForm(contact)}
-                        onDelete={() => void deleteTrustedContact(contact.id)}
+                        onDelete={() => openDeleteDialog(contact.id, contact.name)}
                         onNotify={channel?.releaseEmail ? () => {
                           openNotifyDialog(contact.id, contact.name, channel.releaseEmail);
                         } : undefined}
@@ -743,6 +775,17 @@ export default function VaultPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <ConfirmActionModal
+          open={deleteDialog.isOpen}
+          title="Delete trusted contact?"
+          description={`This will remove ${deleteDialog.contactName || "this contact"} from your trusted contacts. This action cannot be undone.`}
+          confirmLabel="Delete Contact"
+          tone="danger"
+          onCancel={closeDeleteDialog}
+          onConfirm={() => void confirmDeleteTrustedContact()}
+        />
       </div>
     </div>
   );
