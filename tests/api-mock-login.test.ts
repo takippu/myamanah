@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUserUpsert = vi.fn();
 const mockSessionCreate = vi.fn();
@@ -15,6 +15,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 describe("Mock login route", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.MOCK_LOGIN_ENABLED;
@@ -43,14 +44,9 @@ describe("Mock login route", () => {
   });
 
   it("returns 403 in production when not explicitly enabled", async () => {
-    const nodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-    try {
-      const { POST } = await import("@/app/api/auth/mock-login/route");
-      const res = await POST();
-      expect(res.status).toBe(403);
-    } finally {
-      process.env.NODE_ENV = nodeEnv;
-    }
+    vi.stubEnv("NODE_ENV", "production");
+    const { POST } = await import("@/app/api/auth/mock-login/route");
+    const res = await POST();
+    expect(res.status).toBe(403);
   });
 });

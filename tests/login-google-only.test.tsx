@@ -21,7 +21,7 @@ describe("Login page", () => {
   it("renders Google-only sign-in CTA", () => {
     const html = renderToStaticMarkup(<LoginPage />);
     expect(html).toContain("Continue with Google");
-    expect(html).toContain("Google account");
+    expect(html).toContain("encrypted cloud backup");
     expect(html).not.toContain("OTP");
     expect(html).not.toContain("email");
   });

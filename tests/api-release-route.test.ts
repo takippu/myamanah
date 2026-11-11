@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockReleaseTokenFindUnique = vi.fn();
 const mockTrustedContactFindUnique = vi.fn();
@@ -52,9 +52,13 @@ const validEncryptedPayload = {
 
 describe("Secure retrieval route", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-15T12:00:00+08:00"));
     vi.clearAllMocks();
     mockRecordReleaseAuditEvent.mockResolvedValue(undefined);
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("marks the first view and returns secure retrieval instructions", async () => {
     const expiresAt = new Date("2026-03-20T00:00:00.000Z");
